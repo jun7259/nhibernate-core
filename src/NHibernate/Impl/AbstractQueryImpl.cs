@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Data;
 using NHibernate.Engine;
 using NHibernate.Engine.Query;
 using NHibernate.Hql;
@@ -310,7 +311,21 @@ namespace NHibernate.Impl
 		{
 			CheckPositionalParameter(position);
 
-			return SetParameter(position, val, parameterMetadata.GetOrdinalParameterExpectedType(position + 1) ?? GuessType(typeof(T)));
+			var type = parameterMetadata.GetOrdinalParameterExpectedType(position + 1);
+
+			if (type == null)
+			{
+				if (val is DataTable)
+				{
+					type = TypeFactory.Structured((val as DataTable).TableName);
+				}
+				else
+				{
+					type = GuessType(typeof(T));
+				}
+			}
+
+			return SetParameter(position, val, type);
 		}
 
 		private void CheckPositionalParameter(int position)
@@ -327,7 +342,21 @@ namespace NHibernate.Impl
 
 		public IQuery SetParameter<T>(string name, T val)
 		{
-			return SetParameter(name, val, parameterMetadata.GetNamedParameterExpectedType(name) ?? GuessType(typeof (T)));
+			var type = parameterMetadata.GetNamedParameterExpectedType(name);
+
+			if (type == null)
+			{
+				if (val is DataTable)
+				{
+					type = NHibernateUtil.Structured((val as DataTable).TableName);
+				}
+				else
+				{
+					type = GuessType(typeof (T));
+				}
+			}
+
+			return SetParameter(name, val, type);
 		}
 
 		public IQuery SetParameter(string name, object val)
@@ -343,8 +372,7 @@ namespace NHibernate.Impl
 				IType type = parameterMetadata.GetNamedParameterExpectedType(name);
 				if (type == null)
 				{
-					throw new ArgumentNullException("val",
-																					"A type specific Set(name, val) should be called because the Type can not be guessed from a null value.");
+					throw new ArgumentNullException("val", "A type specific Set(name, val) should be called because the Type can not be guessed from a null value.");
 				}
 
 				SetParameter(name, val, type);
@@ -361,8 +389,7 @@ namespace NHibernate.Impl
 		{
 			if (val == null)
 			{
-				throw new ArgumentNullException("val",
-																				"A type specific Set(position, val) should be called because the Type can not be guessed from a null value.");
+				throw new ArgumentNullException("val", "A type specific Set(position, val) should be called because the Type can not be guessed from a null value.");
 			}
 			else
 			{

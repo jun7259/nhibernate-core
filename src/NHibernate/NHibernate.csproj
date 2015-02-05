@@ -640,6 +640,7 @@
     <Compile Include="SqlTypes\StringClobSqlType.cs" />
     <Compile Include="SqlTypes\StringFixedLengthSqlType.cs" />
     <Compile Include="SqlTypes\StringSqlType.cs" />
+    <Compile Include="SqlTypes\StructuredSqlType.cs" />
     <Compile Include="StaleObjectStateException.cs" />
     <Compile Include="Tool\hbm2ddl\SchemaExport.cs" />
     <Compile Include="TransactionException.cs" />
@@ -698,6 +699,7 @@
     <Compile Include="Type\SingleType.cs" />
     <Compile Include="Type\StringClobType.cs" />
     <Compile Include="Type\StringType.cs" />
+    <Compile Include="Type\StructuredType.cs" />
     <Compile Include="Type\TicksType.cs" />
     <Compile Include="Type\TimeSpanType.cs" />
     <Compile Include="Type\TimestampType.cs" />

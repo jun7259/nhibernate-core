@@ -95,6 +95,13 @@ namespace NHibernate.Driver
 		{
 			base.InitializeParameter(dbParam, name, sqlType);
 			SetVariableLengthParameterSize(dbParam, sqlType);
+			if (sqlType is StructuredSqlType)
+			{
+				//NH-3736
+				var sqlParam = dbParam as SqlParameter;
+				sqlParam.SqlDbType = SqlDbType.Structured;
+				sqlParam.TypeName = (sqlType as StructuredSqlType).TypeName;
+			}
 		}
 
 		// Used from SqlServerCeDriver as well

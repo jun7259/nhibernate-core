@@ -46,5 +46,11 @@ namespace NHibernate.Criterion
 			string property = ExpressionProcessor.FindMemberExpression(expression.Body);
 			return new LambdaNaturalIdentifierBuilder(this, property);
 		}
-	}
+
+
+        public string ToHqlString()
+        {
+            throw new NotImplementedException();
+        }
+    }
 }

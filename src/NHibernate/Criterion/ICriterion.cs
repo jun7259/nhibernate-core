@@ -32,5 +32,7 @@ namespace NHibernate.Criterion
 		/// </summary>
 		/// <returns>An array of IProjection used by the Expression.</returns>
 		IProjection[] GetProjections();
+
+        string ToHqlString();
 	}
 }

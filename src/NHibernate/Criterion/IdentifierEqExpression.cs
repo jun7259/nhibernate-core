@@ -96,5 +96,10 @@ namespace NHibernate.Criterion
 		{
 			return (_projection != null ? _projection.ToString() : "ID") + " == " + value;
 		}
+
+        public override string ToHqlString()
+        {
+            return (_projection != null ? _projection.ToString() : "ID") + " == ?";
+        }
 	}
 }

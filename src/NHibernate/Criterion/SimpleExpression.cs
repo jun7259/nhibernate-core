@@ -163,6 +163,11 @@ namespace NHibernate.Criterion
 			return (_projection ?? (object)propertyName) + Op + ValueToStrings();
 		}
 
+        public override string ToHqlString()
+        {
+            return (_projection ?? (object)string.Format("alias.{0}", propertyName)) + Op + " ? ";
+        }
+
 		/// <summary>
 		/// Get the Sql operator to use for the specific 
 		/// subclass of <see cref="SimpleExpression"/>.

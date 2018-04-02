@@ -44,6 +44,11 @@ namespace NHibernate.Criterion
 			return string.Format("not ({0})", _criterion.ToString());
 		}
 
+        public override string ToHqlString()
+        {
+            return "not ( ? )";
+        }
+
 		public override IProjection[] GetProjections()
 		{
 			return _criterion.GetProjections();

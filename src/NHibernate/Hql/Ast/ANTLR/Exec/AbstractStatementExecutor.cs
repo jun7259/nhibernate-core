@@ -1,5 +1,3 @@
-using System;
-using System.Data;
 using Antlr.Runtime;
 using Antlr.Runtime.Tree;
 using NHibernate.Action;
@@ -8,11 +6,20 @@ using NHibernate.Engine;
 using NHibernate.Engine.Transaction;
 using NHibernate.Event;
 using NHibernate.Hql.Ast.ANTLR.Tree;
+using NHibernate.Impl;
+using NHibernate.Param;
 using NHibernate.Persister.Entity;
 using NHibernate.SqlCommand;
 using NHibernate.SqlTypes;
 using NHibernate.Transaction;
+using NHibernate.Type;
 using NHibernate.Util;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using IQueryable = NHibernate.Persister.Entity.IQueryable;
 
 namespace NHibernate.Hql.Ast.ANTLR.Exec
 {
@@ -54,6 +61,82 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 			}
 		}
 
+       protected SqlString ExpandDynamicFilterParameters(SqlString sqlString, ICollection<IParameterSpecification> parameterSpecs, ISessionImplementor session)
+       {
+           var enabledFilters = session.EnabledFilters;
+           if (enabledFilters.Count == 0 || sqlString.ToString().IndexOf(ParserHelper.HqlVariablePrefix) < 0)
+           {
+               return sqlString;
+           }
+
+           Dialect.Dialect dialect = session.Factory.Dialect;
+           string symbols = ParserHelper.HqlSeparators + dialect.OpenQuote + dialect.CloseQuote;
+
+           var result = new SqlStringBuilder();
+           foreach (var sqlPart in sqlString)
+           {
+               var parameter = sqlPart as Parameter;
+               if (parameter != null)
+               {
+                   result.Add(parameter);
+                   continue;
+               }
+
+               var sqlFragment = sqlPart.ToString();
+               var tokens = new StringTokenizer(sqlFragment, symbols, true);
+
+               foreach (string token in tokens)
+               {
+                   if (token.StartsWith(ParserHelper.HqlVariablePrefix))
+                   {
+                       string filterParameterName = token.Substring(1);
+                       string[] parts = StringHelper.ParseFilterParameterName(filterParameterName);
+                       string filterName = parts[0];
+                       string parameterName = parts[1];
+                       var filter = (FilterImpl)enabledFilters[filterName];
+
+                       object value = filter.GetParameter(parameterName);
+                       IType type = filter.FilterDefinition.GetParameterType(parameterName);
+                       int parameterColumnSpan = type.GetColumnSpan(session.Factory);
+                       var collectionValue = value as ICollection;
+                       int? collectionSpan = null;
+
+                       // Add query chunk
+                       string typeBindFragment = string.Join(", ", Enumerable.Repeat("?", parameterColumnSpan).ToArray());
+                       string bindFragment;
+                       if (collectionValue != null && !type.ReturnedClass.IsArray)
+                       {
+                           collectionSpan = collectionValue.Count;
+                           bindFragment = string.Join(", ", Enumerable.Repeat(typeBindFragment, collectionValue.Count).ToArray());
+                       }
+                       else
+                       {
+                           bindFragment = typeBindFragment;
+                       }
+
+                       // dynamic-filter parameter tracking
+                       var filterParameterFragment = SqlString.Parse(bindFragment);
+                       var dynamicFilterParameterSpecification = new DynamicFilterParameterSpecification(filterName, parameterName, type, collectionSpan);
+                       var parameters = filterParameterFragment.GetParameters().ToArray();
+                       var sqlParameterPos = 0;
+                       var paramTrackers = dynamicFilterParameterSpecification.GetIdsForBackTrack(session.Factory);
+                       foreach (var paramTracker in paramTrackers)
+                       {
+                           parameters[sqlParameterPos++].BackTrack = paramTracker;
+                       }
+
+                       parameterSpecs.Add(dynamicFilterParameterSpecification);
+                       result.Add(filterParameterFragment);
+                   }
+                   else
+                   {
+                       result.Add(token);
+                   }
+               }
+           }
+           return result.ToSqlString();
+       }
+ 
 		protected SqlString GenerateIdInsertSelect(IQueryable persister, string tableAlias, IASTNode whereClause)
 		{
 			var select = new SqlSelectBuilder(Factory);

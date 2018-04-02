@@ -107,5 +107,10 @@ namespace NHibernate.Criterion
 		{
 			return '(' + _lhs.ToString() + ' ' + Op + ' ' + _rhs.ToString() + ')';
 		}
+
+        public override string ToHqlString()
+        {
+            return '(' + _lhs.ToHqlString() + ' ' + Op + ' ' + _rhs.ToHqlString() + ')';
+        }
 	}
 }

@@ -22,6 +22,7 @@ namespace NHibernate.Criterion
 		/// looks like.
 		/// </remarks>
 		public abstract override string ToString();
+        public abstract string ToHqlString();
 
 		#region ICriterion Members
 

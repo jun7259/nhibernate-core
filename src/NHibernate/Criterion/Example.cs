@@ -254,6 +254,11 @@ namespace NHibernate.Criterion
 			return "example (" + _entity + ')';
 		}
 
+        public override string ToHqlString()
+        {
+            return "example (" + _entity + ')';
+        }
+
 		/// <summary>
 		/// Determines if the property should be included in the Query.
 		/// </summary>

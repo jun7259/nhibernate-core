@@ -340,6 +340,36 @@ namespace NHibernate.Impl
 			return builder.ToString();
 		}
 
+        public string ToHqlString()
+        {
+            bool first = true;
+            StringBuilder builder = new StringBuilder();
+            foreach (CriterionEntry criterionEntry in criteria)
+            {
+                if (!first)
+                {
+                    builder.Append(" and ");
+                }
+                builder.Append(criterionEntry.ToHqlString());
+                first = false;
+            }
+            if (orderEntries.Count != 0)
+            {
+                builder.AppendLine();
+            }
+            first = true;
+            foreach (OrderEntry orderEntry in orderEntries)
+            {
+                if (!first)
+                {
+                    builder.Append(" and ");
+                }
+                builder.Append(orderEntry.ToString());
+                first = false;
+            }
+            return builder.ToString();
+        }
+
 		public ICriteria AddOrder(Order ordering)
 		{
 			orderEntries.Add(new OrderEntry(ordering, this));
@@ -969,6 +999,11 @@ namespace NHibernate.Impl
 			{
 				return criterion.ToString();
 			}
+
+            public string ToHqlString()
+            {
+                return criterion.ToHqlString();
+            }
 		}
 
 		[Serializable]

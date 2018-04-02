@@ -127,6 +127,21 @@ namespace NHibernate.Criterion
 			return (_lhsProjection ?? (object)_lhsPropertyName) + Op + (_rhsProjection ?? (object)_rhsPropertyName);
 		}
 
+        public override string ToHqlString()
+        {
+            bool s = ((_lhsPropertyName ?? _rhsPropertyName) ?? "x").IndexOf("alias.") > -1;
+
+            if (s)
+            {
+                return (_lhsProjection ?? (object)_lhsPropertyName) + Op + (_rhsProjection ?? (object)_rhsPropertyName);
+            }
+            else
+            {
+                return (_lhsProjection ?? (object)string.Format("alias.{0}", _lhsPropertyName)) + Op + (_rhsProjection ?? (object)string.Format("alias.{0}", _rhsPropertyName));
+            }
+        }
+
+
 		public override IProjection[] GetProjections()
 		{
 			if(_lhsProjection != null && _rhsProjection != null)

@@ -10,6 +10,7 @@ using NHibernate.SqlCommand;
 using NHibernate.SqlTypes;
 using NHibernate.Util;
 using IQueryable = NHibernate.Persister.Entity.IQueryable;
+using System.Collections.Generic;
 
 namespace NHibernate.Hql.Ast.ANTLR.Exec
 {
@@ -81,11 +82,21 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 				{
 					try
 					{
-						var paramsSpec = Walker.Parameters;
-						var sqlQueryParametersList = idInsertSelect.GetParameters().ToList();
-						SqlType[] parameterTypes = paramsSpec.GetQueryParameterTypes(sqlQueryParametersList, session.Factory);
+                        //var paramsSpec = Walker.Parameters;
+                        //var sqlQueryParametersList = idInsertSelect.GetParameters().ToList();
 
-						ps = session.Batcher.PrepareCommand(CommandType.Text, idInsertSelect, parameterTypes);
+                        //SqlType[] parameterTypes = paramsSpec.GetQueryParameterTypes(sqlQueryParametersList, session.Factory);
+
+                        //ps = session.Batcher.PrepareCommand(CommandType.Text, idInsertSelect, parameterTypes);
+                        var paramsSpec = new HashSet<IParameterSpecification>(Walker.Parameters);
+                        paramsSpec.ResetEffectiveExpectedType(parameters);
+                        var sql2 = ExpandDynamicFilterParameters(idInsertSelect, paramsSpec, session);
+
+                        var sqlQueryParametersList = sql2.GetParameters().ToList();
+                        SqlType[] parameterTypes = paramsSpec.GetQueryParameterTypes(sqlQueryParametersList, session.Factory);
+
+                        ps = session.Batcher.PrepareCommand(CommandType.Text, sql2, parameterTypes);
+
 						foreach (var parameterSpecification in paramsSpec)
 						{
 							parameterSpecification.Bind(ps, sqlQueryParametersList, parameters, session);

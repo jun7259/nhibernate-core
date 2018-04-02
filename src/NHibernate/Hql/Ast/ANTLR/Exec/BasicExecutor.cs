@@ -61,13 +61,16 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 				{
 					CheckParametersExpectedType(parameters); // NH Different behavior (NH-1898)
 
-					var sqlQueryParametersList = sql.GetParameters().ToList();
-					SqlType[] parameterTypes = Parameters.GetQueryParameterTypes(sqlQueryParametersList, session.Factory);
+                    var parameterSpecs = new HashSet<IParameterSpecification>(Parameters);
+                    var sql2 = ExpandDynamicFilterParameters(sql, parameterSpecs, session);
 
-					st = session.Batcher.PrepareCommand(CommandType.Text, sql, parameterTypes);
-					foreach (var parameterSpecification in Parameters)
+                    var sqlQueryParametersList = sql2.GetParameters().ToList();
+                    SqlType[] parameterTypes = parameterSpecs.GetQueryParameterTypes(sqlQueryParametersList, session.Factory);
+
+                    st = session.Batcher.PrepareCommand(CommandType.Text, sql2, parameterTypes);
+                    foreach (var parameterSpecification in parameterSpecs)
 					{
-						parameterSpecification.Bind(st, sqlQueryParametersList, parameters, session);
+                        parameterSpecification.Bind(st, sqlQueryParametersList, parameters, session);
 					}
 
 					if (selection != null)

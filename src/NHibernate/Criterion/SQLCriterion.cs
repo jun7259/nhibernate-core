@@ -60,5 +60,10 @@ namespace NHibernate.Criterion
 		{
 			return _sql.ToString();
 		}
+
+        public override string ToHqlString()
+        {
+            throw new NotImplementedException();
+        }
 	}
 }

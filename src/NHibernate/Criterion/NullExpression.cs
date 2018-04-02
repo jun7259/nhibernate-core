@@ -81,5 +81,10 @@ namespace NHibernate.Criterion
 		{
 			return (_projection ?? (object)_propertyName) + " is null";
 		}
+
+        public override string ToHqlString()
+        {
+            return (_projection ?? (object)_propertyName) + " is null";
+        }
 	}
 }

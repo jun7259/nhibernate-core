@@ -6,6 +6,7 @@ using NHibernate.Engine;
 using NHibernate.Impl;
 using NHibernate.SqlCommand;
 using NHibernate.Util;
+using System.Linq;
 
 namespace NHibernate.Criterion
 {
@@ -108,6 +109,12 @@ namespace NHibernate.Criterion
 		{
 			return '(' + StringHelper.Join(Op, criteria) + ')';
 		}
+
+        public override string ToHqlString()
+        {
+            var xx = from x in criteria select x.ToHqlString();
+            return '(' + StringHelper.Join(Op, xx) + ')';
+        }
 
 		public override IProjection[] GetProjections()
 		{

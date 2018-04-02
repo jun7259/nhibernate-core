@@ -115,5 +115,10 @@ namespace NHibernate.Criterion
 		{
 			return _propertyName + " between " + _lo + " and " + _hi;
 		}
+
+        public override string ToHqlString()
+        {
+            return _propertyName + " between ? and ?";
+        }
 	}
 }

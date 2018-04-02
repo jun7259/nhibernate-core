@@ -33,6 +33,11 @@ namespace NHibernate.Criterion
 			return propertyName + (ExcludeEmpty ? " is not empty" : " is empty");
 		}
 
+        public override string ToHqlString()
+        {
+            return propertyName + (ExcludeEmpty ? " is not empty" : " is empty");
+        }
+
 		public override SqlString ToSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery, IDictionary<string, IFilter> enabledFilters)
 		{
 			var entityName = criteriaQuery.GetEntityName(criteria, propertyName);

@@ -112,5 +112,10 @@ namespace NHibernate.Criterion
 		{
 			return projection + " like " + value;
 		}
+
+        public override string ToHqlString()
+        {
+            return projection + " like " + value;
+        }
 	}
 }

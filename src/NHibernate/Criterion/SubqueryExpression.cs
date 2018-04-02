@@ -107,6 +107,14 @@ namespace NHibernate.Criterion
 			return string.Format("{0} ({1}) {2}", op, criteriaImpl, quantifier);
 		}
 
+        public override string ToHqlString()
+        {
+            if (prefixOp)
+                return string.Format("{0} {1} (SELECT ? FROM {3} {3} WHERE {2})", op, quantifier, criteriaImpl.ToHqlString(), criteriaImpl.Alias);
+
+            return string.Format("{0} ({1}) {2}", op, criteriaImpl.ToHqlString(), quantifier);
+        }
+
 		public override TypedValue[] GetTypedValues(ICriteria criteria, ICriteriaQuery criteriaQuery)
 		{
 			return parameters.NamedParameters.Values.ToArray();

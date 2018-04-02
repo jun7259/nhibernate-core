@@ -126,5 +126,10 @@ namespace NHibernate.Criterion
 		{
 			return (projection ?? (object)propertyName) + " ilike " + value;
 		}
+
+        public override string ToHqlString()
+        {
+            return (projection ?? (object)propertyName) + " ilike ?";
+        }
 	}
 }

@@ -31,13 +31,29 @@ namespace NHibernate.Criterion
         public InExpression(IProjection projection, object[] values)
         {
             _projection = projection;
-            _values = values;
+            if (values.Length == 0)
+            {
+                _values = values;
+            }
+            else
+            {
+                //р把计ノ,﹃癬ㄓ
+                _values = new object[] { StringHelper.Join(",", values) };
+            }
         }
 
         public InExpression(string propertyName, object[] values)
         {
             _propertyName = propertyName;
-            _values = values;
+            if (values.Length == 0)
+            {
+                _values = values;
+            }
+            else
+            {
+                //р把计ノ,﹃癬ㄓ
+                _values = new object[] { StringHelper.Join(",", values) };
+            }
         }
 
         public override IProjection[] GetProjections()
@@ -82,7 +98,8 @@ namespace NHibernate.Criterion
 
                 result
                     .Add(columnName)
-                    .Add(" in (");
+                    //эノfnSplitStringsち澄把计
+                    .Add(" in ( select Item from fnSplitStrings(");
 
                 for (int i = 0; i < _values.Length; i++)
                 {
@@ -93,6 +110,7 @@ namespace NHibernate.Criterion
                 	result.Add(parameters[i]);
                 }
 
+                result.Add(",',')");
                 result.Add(")");
             }
 
@@ -153,7 +171,15 @@ namespace NHibernate.Criterion
         private IType GetElementType(ICriteria criteria, ICriteriaQuery criteriaQuery)
         {
             if (_projection == null)
-                return criteriaQuery.GetTypeUsingProjection(criteria, _propertyName);
+                //return criteriaQuery.GetTypeUsingProjection(criteria, _propertyName);
+            {
+                //把计㏕﹚肚String篈
+                if (this._values[0].ToString().Length > 4000)
+                {
+                    return NHibernateUtil.StringClob;
+                }
+                return NHibernateUtil.String;
+            }
 
             IType[] types = _projection.GetTypes(criteria, criteriaQuery);
             if (types.Length != 1)

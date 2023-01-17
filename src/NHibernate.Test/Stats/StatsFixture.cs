@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using NHibernate.Criterion;
+using NHibernate.Multi;
 using NHibernate.Stat;
 using NUnit.Framework;
 
@@ -14,7 +15,7 @@ namespace NHibernate.Test.Stats
 			get { return "NHibernate.Test"; }
 		}
 
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get { return new string[] { "Stats.Continent.hbm.xml" }; }
 		}
@@ -47,7 +48,7 @@ namespace NHibernate.Test.Stats
 		[Test]
 		public void CollectionFetchVsLoad()
 		{
-			IStatistics stats = sessions.Statistics;
+			IStatistics stats = Sfi.Statistics;
 			stats.Clear();
 
 			ISession s = OpenSession();
@@ -139,7 +140,7 @@ namespace NHibernate.Test.Stats
 		[Test]
 		public void QueryStatGathering()
 		{
-			IStatistics stats = sessions.Statistics;
+			IStatistics stats = Sfi.Statistics;
 			stats.Clear();
 
 			ISession s = OpenSession();
@@ -201,6 +202,14 @@ namespace NHibernate.Test.Stats
 			maxTime = sqlStats.ExecutionMaxTime;
 			Assert.AreEqual(maxTime, stats.QueryExecutionMaxTime);
 			Assert.AreEqual( sql, stats.QueryExecutionMaxTimeQueryString);
+
+			// check that 2nd query correctly updates query statistics
+			results = s.CreateSQLQuery(sql).AddEntity(typeof(Country)).List().Count;
+			var queryTime1 = maxTime;
+			var queryTime2 = sqlStats.ExecutionMaxTime == maxTime ? sqlStats.ExecutionMinTime : sqlStats.ExecutionMaxTime;
+			Assert.AreEqual(2, sqlStats.ExecutionCount, "unexpected execution count");
+			Assert.AreEqual((queryTime1 + queryTime2).Ticks / 2, sqlStats.ExecutionAvgTime.Ticks, 2, "unexpected average time");
+
 			tx.Commit();
 			s.Close();
 
@@ -221,7 +230,7 @@ namespace NHibernate.Test.Stats
 				tx.Commit();
 			}
 
-			IStatistics stats = sessions.Statistics;
+			IStatistics stats = Sfi.Statistics;
 			stats.Clear();
 			using (ISession s = OpenSession())
 			{
@@ -238,9 +247,10 @@ namespace NHibernate.Test.Stats
 
 			stats.Clear();
 
-			var driver = sessions.ConnectionProvider.Driver;
+			var driver = Sfi.ConnectionProvider.Driver;
 			if (driver.SupportsMultipleQueries)
 			{
+#pragma warning disable 618
 				using (var s = OpenSession())
 				{
 					var r = s.CreateMultiQuery().Add("from Country").Add("from Continent").List();
@@ -253,6 +263,27 @@ namespace NHibernate.Test.Stats
 					var r = s.CreateMultiCriteria().Add(DetachedCriteria.For<Country>()).Add(DetachedCriteria.For<Continent>()).List();
 				}
 				Assert.AreEqual(1, stats.QueryExecutionCount);
+#pragma warning restore 618
+
+				stats.Clear();
+				using (var s = OpenSession())
+				{
+					s.CreateQueryBatch()
+					 .Add<Country>(s.CreateQuery("from Country"))
+					 .Add<Continent>(s.CreateQuery("from Continent"))
+					 .Execute();
+				}
+				Assert.That(stats.QueryExecutionCount, Is.EqualTo(1));
+
+				stats.Clear();
+				using (var s = OpenSession())
+				{
+					s.CreateQueryBatch()
+					 .Add<Country>(DetachedCriteria.For<Country>())
+					 .Add<Continent>(DetachedCriteria.For<Continent>())
+					 .Execute();
+				}
+				Assert.That(stats.QueryExecutionCount, Is.EqualTo(1));
 			}
 
 			using (ISession s = OpenSession())

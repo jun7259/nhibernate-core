@@ -5,7 +5,10 @@ namespace NHibernate.Test.NHSpecificTest.NH1388
 {
 	public class Student
 	{
+		// Assigned by reflection
+#pragma warning disable CS0649 // Field is never assigned to, and will always have its default value
 		private int _id;
+#pragma warning restore CS0649 // Field is never assigned to, and will always have its default value
 		private readonly IDictionary<Subject, Major> _majors = new Dictionary<Subject, Major>();
 
 		public virtual int Id
@@ -34,10 +37,15 @@ namespace NHibernate.Test.NHSpecificTest.NH1388
 	[TestFixture]
 	public class Fixture : BugTestCase
 	{
+		protected override bool AppliesTo(Dialect.Dialect dialect)
+		{
+			return TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator;
+		}
+
 		[Test]
 		public void BagTest()
 		{
-			int studentId = 1;
+			object studentId;
 
 			// Set major.
 			using (ISession session = OpenSession())
@@ -58,7 +66,7 @@ namespace NHibernate.Test.NHSpecificTest.NH1388
 
 				session.Save(subject1);
 				session.Save(subject2);
-				session.Save(student);
+				studentId = session.Save(student);
 
 				session.Flush();
 				t.Commit();
@@ -106,9 +114,9 @@ namespace NHibernate.Test.NHSpecificTest.NH1388
 		protected override void OnTearDown()
 		{
 			// clean up the database
-			using (ISession session = OpenSession())
+			using (var session = OpenSession())
+			using (var tran = session.BeginTransaction())
 			{
-				session.BeginTransaction();
 				foreach (var student in session.CreateCriteria(typeof (Student)).List<Student>())
 				{
 					session.Delete(student);
@@ -117,13 +125,8 @@ namespace NHibernate.Test.NHSpecificTest.NH1388
 				{
 					session.Delete(subject);
 				}
-				session.Transaction.Commit();
+				tran.Commit();
 			}
-		}
-
-		protected override string CacheConcurrencyStrategy
-		{
-			get { return null; }
 		}
 	}
 }

@@ -1,18 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Antlr.Runtime;
 using NHibernate.Dialect.Function;
 using NHibernate.Hql.Ast.ANTLR.Util;
 using NHibernate.Persister.Collection;
-using NHibernate.Persister.Entity;
 using NHibernate.SqlCommand;
 using NHibernate.Type;
 using NHibernate.Util;
+using IQueryable = NHibernate.Persister.Entity.IQueryable;
 
 namespace NHibernate.Hql.Ast.ANTLR.Tree
 {
 	[CLSCompliant(false)]
-	public class IdentNode : FromReferenceNode, ISelectExpression
+	public class IdentNode : FromReferenceNode
 	{
 		private const int Unknown = 0;
 		private const int PropertyRef = 1;
@@ -27,7 +28,6 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 		{
 			get
 			{
-					
 				IType type = base.DataType;
 				if ( type != null ) 
 				{
@@ -39,7 +39,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 					return fe.DataType;
 				}
 				ISQLFunction sf = Walker.SessionFactoryHelper.FindSQLFunction(Text);
-				return sf == null ? null : sf.ReturnType(null, null);
+				return sf?.GetReturnType(Enumerable.Empty<IType>(), Walker.SessionFactoryHelper.Factory, true);
 			}
 
 			set
@@ -48,6 +48,8 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			}
 		}
 
+		// Since v5.4
+		[Obsolete("Use overload with aliasCreator parameter instead.")]
 		public override void SetScalarColumnText(int i)
 		{
 			if (_nakedPropertyRef) 
@@ -65,6 +67,27 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 					ColumnHelper.GenerateSingleScalarColumn(Walker.ASTFactory, this, i);
 				}
 			}
+		}
+
+		/// <inheritdoc />
+		public override string[] SetScalarColumnText(int i, Func<int,int, string> aliasCreator)
+		{
+			if (_nakedPropertyRef)
+			{
+				// do *not* over-write the column text, as that has already been
+				// "rendered" during resolve
+				return new[] {ColumnHelper.GenerateSingleScalarColumn(Walker.ASTFactory, this, i, aliasCreator)};
+			}
+
+			var fe = FromElement;
+			if (fe != null)
+			{
+				var fragment = fe.GetScalarIdentifierSelectFragment(i, aliasCreator);
+				Text = fragment.ToSqlStringFragment(false);
+				return fragment.GetColumnAliases().ToArray();
+			}
+
+			return new[] {ColumnHelper.GenerateSingleScalarColumn(Walker.ASTFactory, this, i, aliasCreator)};
 		}
 
 		public override void ResolveIndex(IASTNode parent)
@@ -105,7 +128,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 
 			FromElement elem = factory.CreateCollection(queryableCollection, role, JoinType.InnerJoin, false, true);
 			FromElement = elem;
-			Walker.AddQuerySpaces(queryableCollection.CollectionSpaces);	// Always add the collection's query spaces.
+			Walker.AddQuerySpaces(queryableCollection);	// Always add the collection's query spaces.
 		}
 
 		public override void Resolve(bool generateJoin, bool implicitJoin, string classAlias, IASTNode parent)
@@ -209,7 +232,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 					? persister.ToColumns(fromElement.TableAlias, property)
 					: persister.ToColumns(property);
 
-			string text = StringHelper.Join(", ", columns);
+			string text = string.Join(", ", columns);
 			Text = columns.Length == 1 ? text : "(" + text + ")";
 			Type = HqlSqlWalker.SQL_TOKEN;
 
@@ -239,7 +262,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 				throw new QueryException("Property '" + OriginalText + "' is not a component.  Use an alias to reference associations or collections.");
 			}
 
-			IType propertyType ;  // used to set the type of the parent dot node
+			IType propertyType; // used to set the type of the parent dot node
 			string propertyPath = Text + "." + NextSibling.Text;
 			try
 			{
@@ -291,7 +314,6 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			return true;
 		}
 
-
 		private IType GetNakedPropertyType(FromElement fromElement)
 		{
 			if (fromElement == null)
@@ -314,14 +336,14 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 
 		private FromElement LocateSingleFromElement()
 		{
-			IList<IASTNode> fromElements = Walker.CurrentFromClause.GetFromElements();
+			var fromElements = Walker.CurrentFromClause.GetFromElementsTyped();
 			if (fromElements == null || fromElements.Count != 1)
 			{
 				// TODO : should this be an error?
 				return null;
 			}
 
-			FromElement element = (FromElement)fromElements[0];
+			FromElement element = fromElements[0];
 			if (element.ClassAlias != null)
 			{
 				// naked property-refs cannot be used with an aliased from element

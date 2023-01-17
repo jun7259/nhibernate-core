@@ -7,6 +7,7 @@ using NUnit.Framework;
 
 namespace NHibernate.Test.MappingByCode.MappersTests.DynamicComponentMapperTests
 {
+	[TestFixture]
 	public class DynCompAttributesSettingTest
 	{
 		private class Person
@@ -74,6 +75,5 @@ namespace NHibernate.Test.MappingByCode.MappersTests.DynamicComponentMapperTests
 
 			Assert.That(component.Properties.Single(), Is.TypeOf<HbmProperty>().And.Property("Name").EqualTo("Pizza"));
 		}
-
 	}
 }

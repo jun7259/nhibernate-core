@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using NHibernate.Cfg;
 using NHibernate.Criterion;
@@ -18,8 +17,8 @@ namespace NHibernate.Test.NHSpecificTest.CriteriaQueryOnComponentCollection
 
 		protected override void OnSetUp()
 		{
-			using (var s = sessions.OpenSession())
-			using (s.BeginTransaction())
+			using (var s = Sfi.OpenSession())
+			using (var t = s.BeginTransaction())
 			{
 				var parent = new Employee
 				{
@@ -45,25 +44,25 @@ namespace NHibernate.Test.NHSpecificTest.CriteriaQueryOnComponentCollection
 				s.Save(parent);
 				s.Save(emp);
 
-				s.Transaction.Commit();
+				t.Commit();
 			}
 		}
 
 		protected override void OnTearDown()
 		{
-			using (var s = sessions.OpenSession())
-			using (s.BeginTransaction())
+			using (var s = Sfi.OpenSession())
+			using (var t = s.BeginTransaction())
 			{
 				s.Delete("from System.Object");
 
-				s.Transaction.Commit();
+				t.Commit();
 			}
 		}
 
 		[Test]
 		public void CanQueryByCriteriaOnSetOfCompositeElement()
 		{
-			using (var s = sessions.OpenSession())
+			using (var s = Sfi.OpenSession())
 			{
 				var list = s.CreateCriteria<Employee>()
 				            .CreateCriteria("ManagedEmployees")
@@ -80,7 +79,7 @@ namespace NHibernate.Test.NHSpecificTest.CriteriaQueryOnComponentCollection
 		[Test]
 		public void CanQueryByCriteriaOnSetOfElement()
 		{
-			using (var s = sessions.OpenSession())
+			using (var s = Sfi.OpenSession())
 			{
 				var list = s.CreateCriteria<Employee>()
 				            .CreateCriteria("Amounts")
@@ -94,12 +93,11 @@ namespace NHibernate.Test.NHSpecificTest.CriteriaQueryOnComponentCollection
 			}
 		}
 
-
 		[TestCase(JoinType.LeftOuterJoin)]
 		[TestCase(JoinType.InnerJoin)]
 		public void CanQueryByCriteriaOnSetOfElementByCreateAlias(JoinType joinType)
 		{
-			using (var s = sessions.OpenSession())
+			using (var s = Sfi.OpenSession())
 			{
 				var list = s.CreateCriteria<Employee>("x")
 				            .CreateAlias("x.Amounts", "amount", joinType)
@@ -113,11 +111,10 @@ namespace NHibernate.Test.NHSpecificTest.CriteriaQueryOnComponentCollection
 			}
 		}
 
-
 		[Test]
 		public void CanQueryByCriteriaOnSetOfCompositeElement_UsingDetachedCriteria()
 		{
-			using (var s = sessions.OpenSession())
+			using (var s = Sfi.OpenSession())
 			{
 				var list = s.CreateCriteria<Employee>()
 				            .Add(Subqueries.PropertyIn("id",
@@ -133,8 +130,7 @@ namespace NHibernate.Test.NHSpecificTest.CriteriaQueryOnComponentCollection
 			}
 		}
 
-
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get { return new[] {"NHSpecificTest.CriteriaQueryOnComponentCollection.Mappings.hbm.xml"}; }
 		}
@@ -143,6 +139,5 @@ namespace NHibernate.Test.NHSpecificTest.CriteriaQueryOnComponentCollection
 		{
 			get { return "NHibernate.Test"; }
 		}
-
 	}
 }

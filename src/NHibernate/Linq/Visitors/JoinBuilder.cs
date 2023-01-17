@@ -25,7 +25,10 @@ namespace NHibernate.Linq.Visitors
 		{
 			_nameGenerator = new NameGenerator(queryModel);
 			_queryModel = queryModel;
+			AddJoinMethod = AddJoin;
 		}
+		
+		internal System.Action<QueryModel, NhJoinClause> AddJoinMethod { get; }
 
 		public IEnumerable<NhJoinClause> Joins
 		{
@@ -39,7 +42,7 @@ namespace NHibernate.Linq.Visitors
 			if (!_joins.TryGetValue(key, out join))
 			{
 				join = new NhJoinClause(_nameGenerator.GetNewName(), expression.Type, expression);
-				_queryModel.BodyClauses.Add(join);
+				AddJoinMethod(_queryModel, join);
 				_joins.Add(key, join);
 			}
 
@@ -60,33 +63,38 @@ namespace NHibernate.Linq.Visitors
 		public bool CanAddJoin(Expression expression)
 		{
 			var source = QuerySourceExtractor.GetQuerySource(expression);
-			
-			if (_queryModel.MainFromClause == source) 
+
+			if (_queryModel.MainFromClause == source)
 				return true;
-			
+
 			var bodyClause = source as IBodyClause;
-			if (bodyClause != null && _queryModel.BodyClauses.Contains(bodyClause)) 
+			if (bodyClause != null && _queryModel.BodyClauses.Contains(bodyClause))
 				return true;
-			
+
 			var resultOperatorBase = source as ResultOperatorBase;
 			return resultOperatorBase != null && _queryModel.ResultOperators.Contains(resultOperatorBase);
 		}
 
-		private class QuerySourceExtractor : ExpressionTreeVisitor
+		private void AddJoin(QueryModel queryModel, NhJoinClause joinClause)
+		{
+			queryModel.BodyClauses.Add(joinClause);
+		}
+
+		private class QuerySourceExtractor : RelinqExpressionVisitor
 		{
 			private IQuerySource _querySource;
 
 			public static IQuerySource GetQuerySource(Expression expression)
 			{
 				var sourceExtractor = new QuerySourceExtractor();
-				sourceExtractor.VisitExpression(expression);
+				sourceExtractor.Visit(expression);
 				return sourceExtractor._querySource;
 			}
 
-			protected override Expression VisitQuerySourceReferenceExpression(QuerySourceReferenceExpression expression)
+			protected override Expression VisitQuerySourceReference(QuerySourceReferenceExpression expression)
 			{
 				_querySource = expression.ReferencedQuerySource;
-				return base.VisitQuerySourceReferenceExpression(expression);
+				return base.VisitQuerySourceReference(expression);
 			}
 		}
 	}

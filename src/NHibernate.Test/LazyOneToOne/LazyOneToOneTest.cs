@@ -9,7 +9,7 @@ namespace NHibernate.Test.LazyOneToOne
 	[TestFixture]
 	public class LazyOneToOneTest : TestCase
 	{
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get { return new[] {"LazyOneToOne.Person.hbm.xml"}; }
 		}
@@ -28,11 +28,6 @@ namespace NHibernate.Test.LazyOneToOne
 		{
 			configuration.SetProperty(Environment.MaxFetchDepth, "2");
 			configuration.SetProperty(Environment.UseSecondLevelCache, "false");
-		}
-
-		protected override string CacheConcurrencyStrategy
-		{
-			get { return null; }
 		}
 
 		[Test]
@@ -61,19 +56,21 @@ namespace NHibernate.Test.LazyOneToOne
 
 			p2 = s.CreateQuery("from Person where name='Emmanuel'").UniqueResult<Person>();
 			Assert.That(p2.Employee, Is.Null);
+			Assert.That(p2.Employee, Is.Null);
 			t.Commit();
 			s.Close();
 
 			s = OpenSession();
 			t = s.BeginTransaction();
-			p = s.Get<Person>("Gavin");
-			Assert.That(!NHibernateUtil.IsPropertyInitialized(p, "Employee"));
+			p = s.Get<Person>("Gavin"); // The default loader will fetch the employee
+			Assert.That(NHibernateUtil.IsPropertyInitialized(p, "Employee"));
 
 			Assert.That(p.Employee.Person, Is.SameAs(p));
 			Assert.That(NHibernateUtil.IsInitialized(p.Employee.Employments));
 			Assert.That(p.Employee.Employments.Count, Is.EqualTo(1));
 
 			p2 = s.Get<Person>("Emmanuel");
+			Assert.That(p2.Employee, Is.Null);
 			Assert.That(p2.Employee, Is.Null);
 			s.Delete(p2);
 			s.Delete(old);

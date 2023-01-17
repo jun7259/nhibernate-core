@@ -13,7 +13,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 	[CLSCompliant(false)]
 	public class FromElementFactory
 	{
-		private static readonly IInternalLogger Log = LoggerProvider.LoggerFor(typeof(FromElementFactory));
+		private static readonly INHibernateLogger Log = NHibernateLogger.For(typeof(FromElementFactory));
 
 		private readonly FromClause _fromClause;
 		private readonly FromElement _origin;
@@ -25,7 +25,6 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 		private bool _inElementsFunction;
 		private IQueryableCollection _queryableCollection;
 		private CollectionType _collectionType;
-
 
 		/// <summary>
 		/// Creates entity from elements.
@@ -88,7 +87,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 							null);
 
 			// Add to the query spaces.
-			_fromClause.Walker.AddQuerySpaces(entityPersister.QuerySpaces);
+			_fromClause.Walker.AddQuerySpaces(entityPersister);
 
 			return elem;
 		}
@@ -107,9 +106,9 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 				FromElement parentFromElement,
 				string classAlias)
 		{
-			if (Log.IsDebugEnabled)
+			if (Log.IsDebugEnabled())
 			{
-				Log.Debug("createFromElementInSubselect() : path = " + path);
+				Log.Debug("createFromElementInSubselect() : path = {0}", path);
 			}
 
 			// Create an DotNode AST for the path and resolve it.
@@ -123,10 +122,14 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			
 			string tableAlias = correlatedSubselect ? fromElement.TableAlias : null;
 
+			//To properly generete subselect implicit join is required by SqlGenerator
+			if (fromElement.IsImplied)
+				fromElement.JoinSequence.SetUseThetaStyle(true);
+
 			// If the from element isn't in the same clause, create a new from element.
 			if (fromElement.FromClause != _fromClause)
 			{
-				if (Log.IsDebugEnabled)
+				if (Log.IsDebugEnabled())
 				{
 					Log.Debug("createFromElementInSubselect() : creating a new FROM element...");
 				}
@@ -141,9 +144,9 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 								tableAlias
 				);
 			}
-			if (Log.IsDebugEnabled)
+			if (Log.IsDebugEnabled())
 			{
-				Log.Debug("createFromElementInSubselect() : " + path + " -> " + fromElement);
+				Log.Debug("createFromElementInSubselect() : {0} -> {1}", path, fromElement);
 			}
 
 			return fromElement;
@@ -168,7 +171,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 
 			// Correlated subqueries create 'special' implied from nodes
 			// because correlated subselects can't use an ANSI-style join
-			bool explicitSubqueryFromElement = _fromClause.IsSubQuery && !_implied;
+			bool explicitSubqueryFromElement = _fromClause.IsScalarSubQuery && !_implied;
 			if (explicitSubqueryFromElement)
 			{
 				string pathRoot = StringHelper.Root(_path);
@@ -190,18 +193,18 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			if (elementType.IsEntityType)
 			{
 				// A collection of entities...
-				elem = CreateEntityAssociation(role, roleAlias, joinType);
+				elem = CreateEntityAssociation(role, roleAlias, joinType, indexed);
 			}
 			else if (elementType.IsComponentType)
 			{
 				// A collection of components...
-				JoinSequence joinSequence = CreateJoinSequence(roleAlias, joinType);
+				JoinSequence joinSequence = CreateJoinSequence(roleAlias, joinType, indexed);
 				elem = CreateCollectionJoin(joinSequence, roleAlias);
 			}
 			else
 			{
 				// A collection of scalar elements...
-				JoinSequence joinSequence = CreateJoinSequence(roleAlias, joinType);
+				JoinSequence joinSequence = CreateJoinSequence(roleAlias, joinType, indexed);
 				elem = CreateCollectionJoin(joinSequence, roleAlias);
 			}
 
@@ -263,7 +266,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			_fromClause.AddCollectionJoinFromElementByPath(_path, destination);
 			//		origin.addDestination(destination);
 			// Add the query spaces.
-			_fromClause.Walker.AddQuerySpaces(entityPersister.QuerySpaces);
+			_fromClause.Walker.AddQuerySpaces(entityPersister);
 
 			CollectionType type = queryableCollection.CollectionType;
 			string role = type.Role;
@@ -279,7 +282,6 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			elem.CollectionTableAlias = roleAlias;	// The collection alias is the role.
 			return elem;
 		}
-
 
 		public FromElement CreateEntityJoin(
 				string entityClass,
@@ -298,7 +300,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			// multi-table entity
 			if (_implied && !elem.UseFromFragment)
 			{
-				if (Log.IsDebugEnabled)
+				if (Log.IsDebugEnabled())
 				{
 					Log.Debug("createEntityJoin() : Implied entity join");
 				}
@@ -334,7 +336,8 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 		private FromElement CreateEntityAssociation(
 						string role,
 						string roleAlias,
-						JoinType joinType)
+						JoinType joinType,
+						bool implicitJoin)
 		{
 			FromElement elem;
 			IQueryable entityPersister = (IQueryable)_queryableCollection.ElementPersister;
@@ -343,27 +346,28 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			// Get the class name of the associated entity.
 			if (_queryableCollection.IsOneToMany)
 			{
-				if (Log.IsDebugEnabled)
+				if (Log.IsDebugEnabled())
 				{
-					Log.Debug("createEntityAssociation() : One to many - path = " + _path + " role = " + role + " associatedEntityName = " + associatedEntityName);
+					Log.Debug("createEntityAssociation() : One to many - path = {0} role = {1} associatedEntityName = {2}", _path, role, associatedEntityName);
 				}
 
-				var joinSequence = CreateJoinSequence(roleAlias, joinType);
+				var joinSequence = CreateJoinSequence(roleAlias, joinType, implicitJoin);
 
 				elem = CreateJoin(associatedEntityName, roleAlias, joinSequence, (EntityType) _queryableCollection.ElementType, false);
 				elem.UseFromFragment |= elem.IsImplied && elem.Walker.IsSubQuery;
 			}
 			else
 			{
-				if (Log.IsDebugEnabled)
+				if (Log.IsDebugEnabled())
 				{
-					Log.Debug("createManyToMany() : path = " + _path + " role = " + role + " associatedEntityName = " + associatedEntityName);
+					Log.Debug("createManyToMany() : path = {0} role = {1} associatedEntityName = {2}", _path, role, associatedEntityName);
 				}
 
-				elem = CreateManyToMany(role, associatedEntityName, roleAlias, entityPersister, (EntityType)_queryableCollection.ElementType, joinType);
-				_fromClause.Walker.AddQuerySpaces(_queryableCollection.CollectionSpaces);
+				elem = CreateManyToMany(role, associatedEntityName, roleAlias, entityPersister, (EntityType)_queryableCollection.ElementType, joinType, implicitJoin);
+				_fromClause.Walker.AddQuerySpaces(_queryableCollection);
 			}
 			elem.CollectionTableAlias = roleAlias;
+			_fromClause.AddCollectionJoinFromElementByPath(_path, elem);
 			return elem;
 		}
 
@@ -392,7 +396,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			_origin.Text = "";						// The destination node will have all the FROM text.
 			_origin.CollectionJoin = true;			// The parent node is a collection join too (voodoo - see JoinProcessor)
 			_fromClause.AddCollectionJoinFromElementByPath(_path, destination);
-			_fromClause.Walker.AddQuerySpaces(_queryableCollection.CollectionSpaces);
+			_fromClause.Walker.AddQuerySpaces(_queryableCollection);
 			return destination;
 		}
 
@@ -402,7 +406,8 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 						string roleAlias,
 						IEntityPersister entityPersister,
 						EntityType type,
-						JoinType joinType)
+						JoinType joinType,
+						bool implicitJoin)
 		{
 			FromElement elem;
 			SessionFactoryHelperExtensions sfh = _fromClause.SessionFactoryHelper;
@@ -410,7 +415,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			if (_inElementsFunction /*implied*/ )
 			{
 				// For implied many-to-many, just add the end join.
-				JoinSequence joinSequence = CreateJoinSequence(roleAlias, joinType);
+				JoinSequence joinSequence = CreateJoinSequence(roleAlias, joinType, implicitJoin);
 				elem = CreateJoin(associatedEntityName, roleAlias, joinSequence, type, true);
 			}
 			else
@@ -422,7 +427,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 				string[] secondJoinColumns = sfh.GetCollectionElementColumns(role, roleAlias);
 
 				// Add the second join, the one that ends in the destination table.
-				JoinSequence joinSequence = CreateJoinSequence(roleAlias, joinType);
+				JoinSequence joinSequence = CreateJoinSequence(roleAlias, joinType, implicitJoin);
 				joinSequence.AddJoin(sfh.GetElementAssociationType(_collectionType), tableAlias, joinType, secondJoinColumns);
 				elem = CreateJoin(associatedEntityName, tableAlias, joinSequence, type, false);
 				elem.UseFromFragment = true;
@@ -430,8 +435,8 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			return elem;
 		}
 
-
-		private JoinSequence CreateJoinSequence(string roleAlias, JoinType joinType)
+		//TODO: Investigate why not implicit indexed collection join is incorrectly generated and get rid of implicitJoin parameter (check IndexNode.Resolve)
+		private JoinSequence CreateJoinSequence(string roleAlias, JoinType joinType, bool implicitJoin)
 		{
 			SessionFactoryHelperExtensions sessionFactoryHelper = _fromClause.SessionFactoryHelper;
 			string[] joinColumns = Columns;
@@ -439,7 +444,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			{
 				throw new InvalidOperationException("collectionType is null!");
 			}
-			return sessionFactoryHelper.CreateJoinSequence(_implied, _collectionType, roleAlias, joinType, joinColumns);
+			return sessionFactoryHelper.CreateJoinSequence(implicitJoin, _collectionType, roleAlias, joinType, joinColumns);
 		}
 
 		private FromElement CreateJoin(

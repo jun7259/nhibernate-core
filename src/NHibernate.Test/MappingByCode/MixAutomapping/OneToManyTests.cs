@@ -4,6 +4,7 @@ using NUnit.Framework;
 
 namespace NHibernate.Test.MappingByCode.MixAutomapping
 {
+	[TestFixture]
 	public class OneToManyTests
 	{
 		private class MyClass
@@ -19,7 +20,6 @@ namespace NHibernate.Test.MappingByCode.MixAutomapping
 
 		private class Related
 		{
-
 		}
 
 		private class Bidirectional

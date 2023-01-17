@@ -56,28 +56,28 @@ namespace NHibernate.Test.UtilityTest
 			Assert.AreEqual(1, StringHelper.CountUnquoted("abcd ? ef '?' tf", '?'));
 		}
 
-		[Test]
 		/// <summary>
 		/// Try to locate single quotes which isn't allowed
 		/// </summary>
+		[Test]
 		public void CantCountQuotes()
 		{
 			Assert.Throws<ArgumentOutOfRangeException>(() => StringHelper.CountUnquoted("abcd eftf", StringHelper.SingleQuote));
 		}
 
-		[Test]
 		/// <summary>
 		/// Qualify a name with a prefix
 		/// </summary>
+		[Test]
 		public void Qualify()
 		{
 			Assert.AreEqual("a.b", StringHelper.Qualify("a", "b"), "Qualified names differ");
 		}
 
-		[Test]
 		/// <summary>
 		/// Qualify an array of names with a prefix
 		/// </summary>
+		[Test]
 		public void QualifyArray()
 		{
 			string[] simple = { "b", "c" };
@@ -138,7 +138,6 @@ namespace NHibernate.Test.UtilityTest
 			Assert.That(StringHelper.PurgeBackticksEnclosing("`something`"), Is.EqualTo("something"));
 		}
 
-
 		[TestCase("ab", 0, -1, 0)]
 		[TestCase("a\r\nb", 0, 1, 2)]
 		[TestCase("a\nb", 0, 1, 1)]
@@ -152,7 +151,6 @@ namespace NHibernate.Test.UtilityTest
 			Assert.That(matchIndex, Is.EqualTo(expectedIndex));
 			Assert.That(matchLength, Is.EqualTo(expectedMatchLength));
 		}
-
 
 		[TestCase("ab", 0, false, 0)]
 		[TestCase("a\r\nb", 0, false, 0)]

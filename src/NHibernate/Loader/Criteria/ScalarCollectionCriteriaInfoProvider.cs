@@ -1,12 +1,13 @@
 using System;
 using NHibernate.Hql.Util;
+using NHibernate.Persister;
 using NHibernate.Persister.Collection;
 using NHibernate.Persister.Entity;
 using NHibernate.Type;
 
 namespace NHibernate.Loader.Criteria
 {
-	public class ScalarCollectionCriteriaInfoProvider : ICriteriaInfoProvider
+	public class ScalarCollectionCriteriaInfoProvider : ICriteriaInfoProvider, IExtendedCriteriaInfoProvider
 	{
 		private readonly String role;
 		private readonly IQueryableCollection persister;
@@ -42,11 +43,12 @@ namespace NHibernate.Loader.Criteria
 			}
 		}
 
+		IPersister IExtendedCriteriaInfoProvider.Persister => persister as IPersister;
+
 		public IType GetType(String relativePath)
 		{
 			//not sure what things are going to be passed here, how about 'id', maybe 'index' or 'key' or 'elements' ???
 			return PropertyMapping.ToType(relativePath);
 		}
-
 	}
 }

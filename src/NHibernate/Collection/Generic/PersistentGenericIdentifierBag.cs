@@ -1,15 +1,18 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Linq;
+using System.Linq.Expressions;
 using NHibernate.DebugHelpers;
 using NHibernate.Engine;
 using NHibernate.Id;
+using NHibernate.Linq;
 using NHibernate.Loader;
 using NHibernate.Persister.Collection;
 using NHibernate.Type;
+using NHibernate.Util;
 
 namespace NHibernate.Collection.Generic
 {
@@ -30,7 +33,7 @@ namespace NHibernate.Collection.Generic
 	/// </remarks>
 	[Serializable]
 	[DebuggerTypeProxy(typeof (CollectionProxy<>))]
-	public class PersistentIdentifierBag<T> : AbstractPersistentCollection, IList<T>, IList
+	public partial class PersistentIdentifierBag<T> : AbstractPersistentCollection, IList<T>, IReadOnlyList<T>, IList, IQueryable<T>
 	{
 		/* NH considerations:
 		 * For various reason we know that the underlining type will be a List<T> or a 
@@ -42,7 +45,7 @@ namespace NHibernate.Collection.Generic
 		private Dictionary<int, object> _identifiers; //index -> id 
 
 		private IList<T> _values; //element
-		
+
 		public PersistentIdentifierBag() {}
 		
 		public PersistentIdentifierBag(ISessionImplementor session) : base(session) {}
@@ -157,7 +160,7 @@ namespace NHibernate.Collection.Generic
 		public override IEnumerable GetDeletes(ICollectionPersister persister, bool indexIsFormula)
 		{
 			var snap = (ISet<SnapshotElement>)GetSnapshot();
-			ArrayList deletes = new ArrayList(snap.Select(x => x.Id).ToArray());
+			var deletes = snap.ToList(x => x.Id);
 			for (int i = 0; i < _values.Count; i++)
 			{
 				if (_values[i] != null)
@@ -212,7 +215,7 @@ namespace NHibernate.Collection.Generic
 			return old != null && elemType.IsDirty(old, entry, Session);
 		}
 
-		public override object ReadFrom(IDataReader reader, ICollectionPersister persister, ICollectionAliases descriptor, object owner)
+		public override object ReadFrom(DbDataReader reader, ICollectionPersister persister, ICollectionAliases descriptor, object owner)
 		{
 			object element = persister.ReadElement(reader, owner, descriptor.SuffixedElementAliases, Session);
 			object id = persister.ReadIdentifier(reader, descriptor.SuffixedIdentifierAlias, Session);
@@ -228,15 +231,13 @@ namespace NHibernate.Collection.Generic
 
 		public override object GetSnapshot(ICollectionPersister persister)
 		{
-			EntityMode entityMode = Session.EntityMode;
-
 			var map = new HashSet<SnapshotElement>();
 			int i = 0;
 			foreach (object value in _values)
 			{
 				object id;
 				_identifiers.TryGetValue(i++, out id);
-				var valueCopy = persister.ElementType.DeepCopy(value, entityMode, persister.Factory);
+				var valueCopy = persister.ElementType.DeepCopy(value, persister.Factory);
 				map.Add(new SnapshotElement { Id = id, Value = valueCopy });
 			}
 			return map;
@@ -245,7 +246,7 @@ namespace NHibernate.Collection.Generic
 		public override ICollection GetOrphans(object snapshot, string entityName)
 		{
 			var sn = (ISet<SnapshotElement>)GetSnapshot();
-			return GetOrphans(sn.Select(x => x.Value).ToArray(), (ICollection) _values, entityName, Session);
+			return GetOrphans(sn.ToArray(x => x.Value), (ICollection) _values, entityName, Session);
 		}
 
 		public override void PreInsert(ICollectionPersister persister)
@@ -390,11 +391,17 @@ namespace NHibernate.Collection.Generic
 			get { return ReadSize() ? CachedSize : _values.Count; }
 		}
 
-		void ICollection.CopyTo(Array array, int index)
+		void ICollection.CopyTo(Array array, int arrayIndex)
 		{
-			for (int i = index; i < Count; i++)
+			Read();
+			if (_values is ICollection collection)
 			{
-				array.SetValue(this[i], i);
+				collection.CopyTo(array, arrayIndex);
+			}
+			else
+			{
+				foreach (var item in _values)
+					array.SetValue(item, arrayIndex++);
 			}
 		}
 
@@ -449,10 +456,8 @@ namespace NHibernate.Collection.Generic
 
 		public void CopyTo(T[] array, int arrayIndex)
 		{
-			for (int i = arrayIndex; i < Count; i++)
-			{
-				array.SetValue(this[i], i);
-			}
+			Read();
+			_values.CopyTo(array, arrayIndex);
 		}
 
 		public bool Remove(T item)
@@ -516,5 +521,20 @@ namespace NHibernate.Collection.Generic
 				return (Id != null ? Id.GetHashCode() : 0);
 			}
 		}
+
+		#region IQueryable<T> Members
+
+		[NonSerialized]
+		IQueryable<T> _queryable;
+
+		Expression IQueryable.Expression => InnerQueryable.Expression;
+
+		System.Type IQueryable.ElementType => InnerQueryable.ElementType;
+
+		IQueryProvider IQueryable.Provider => InnerQueryable.Provider;
+
+		IQueryable<T> InnerQueryable => _queryable ?? (_queryable = new NhQueryable<T>(Session, this));
+
+		#endregion
 	}
 }

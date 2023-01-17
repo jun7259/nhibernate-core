@@ -13,7 +13,7 @@ namespace NHibernate.Test.Legacy
 	[TestFixture]
 	public class ParentChildTest : TestCase
 	{
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get
 			{
@@ -44,6 +44,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void Replicate()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			ISession s = OpenSession();
 			Container baz = new Container();
 			Contained f = new Contained();
@@ -342,8 +345,11 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void CollectionQuery()
 		{
-			ISession s = OpenSession();
-			ITransaction t = s.BeginTransaction();
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
+			using var s = OpenSession();
+			using var t = s.BeginTransaction();
 
 			Simple s1 = new Simple();
 			s1.Name = "s";
@@ -366,10 +372,15 @@ namespace NHibernate.Test.Legacy
 			l.Add(null);
 			l.Add(s2);
 			c.ManyToMany = l;
+			c.ManyToOne = new Simple { Name = "x", Count = 4};
+			s.Save(c.ManyToOne, c.ManyToOne.Count);
 			s.Save(c);
 
 			Assert.AreEqual(1,
 			                s.CreateQuery("select c from c in class ContainerX, s in class Simple where c.OneToMany[2] = s").List
+			                	().Count);			
+			Assert.AreEqual(1,
+			                s.CreateQuery("select c from c in class ContainerX, s in class Simple where c.OneToMany[2] = s and c.ManyToOne.Name = 'x'").List
 			                	().Count);
 			Assert.AreEqual(1,
 			                s.CreateQuery("select c from c in class ContainerX, s in class Simple where c.ManyToMany[2] = s").
@@ -387,7 +398,7 @@ namespace NHibernate.Test.Legacy
 			Assert.AreEqual(1,
 			                s.CreateQuery("select c from c in class ContainerX where 's' = c.ManyToMany[(3+1)/4-1].Name").List().
 			                	Count);
-			if (Dialect.SupportsSubSelects)
+			if (Dialect.SupportsScalarSubSelects)
 			{
 				Assert.AreEqual(1,
 				                s.CreateQuery(
@@ -407,13 +418,13 @@ namespace NHibernate.Test.Legacy
 			                	"select c from c in class ContainerX where c.ManyToMany[ c.OneToMany[0].Count ].Name = 's'").List().
 			                	Count);
 
+			s.Delete(c.ManyToOne);
 			s.Delete(c);
 			s.Delete(s1);
 			s.Delete(s2);
 			s.Delete(s3);
 
 			t.Commit();
-			s.Close();
 		}
 
 		[Test]
@@ -499,6 +510,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void ManyToMany()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			// if( dialect is Dialect.HSQLDialect) return;
 
 			ISession s = OpenSession();
@@ -556,6 +570,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void Container()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			ISession s = OpenSession();
 			ITransaction t = s.BeginTransaction();
 			Container c = new Container();
@@ -688,6 +705,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void CascadeCompositeElements()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			Container c = new Container();
 			
 			c.Cascades = new List<Container.ContainerInnerClass>();
@@ -749,6 +769,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void Bag()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			//if( dialect is Dialect.HSQLDialect ) return;
 
 			ISession s = OpenSession();

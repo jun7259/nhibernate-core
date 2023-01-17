@@ -16,16 +16,29 @@ namespace NHibernate.Linq.Visitors
 
 		public QuerySourceNamer QuerySourceNamer { get; set; }
 
+		/// <summary>
+		/// Entity type to insert or update when the operation is a DML.
+		/// </summary>
+		public System.Type TargetEntityType { get; }
+
+		public QueryMode RootQueryMode { get; }
+
+		internal bool CanCachePlan { get; set; } = true;
+
 		public VisitorParameters(
 			ISessionFactoryImplementor sessionFactory, 
 			IDictionary<ConstantExpression, NamedParameter> constantToParameterMap, 
 			List<NamedParameterDescriptor> requiredHqlParameters, 
-			QuerySourceNamer querySourceNamer)
+			QuerySourceNamer querySourceNamer,
+			System.Type targetEntityType,
+			QueryMode rootQueryMode)
 		{
 			SessionFactory = sessionFactory;
 			ConstantToParameterMap = constantToParameterMap;
 			RequiredHqlParameters = requiredHqlParameters;
 			QuerySourceNamer = querySourceNamer;
+			TargetEntityType = targetEntityType;
+			RootQueryMode = rootQueryMode;
 		}
 	}
 }

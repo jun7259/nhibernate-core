@@ -7,17 +7,19 @@ using NHibernate.Type;
 namespace NHibernate.Hql.Ast.ANTLR.Tree
 {
 	[CLSCompliant(false)]
-	public class QueryNode : AbstractRestrictableStatement, ISelectExpression
+	public class QueryNode : AbstractRestrictableStatement, ISelectExpressionExtension
 	{
-		private static readonly IInternalLogger Log = LoggerProvider.LoggerFor(typeof(QueryNode));
+		private static readonly INHibernateLogger Log = NHibernateLogger.For(typeof(QueryNode));
 
 		private OrderByClause _orderByClause;
+
+		private int _scalarColumn = -1;
 
 		public QueryNode(IToken token) : base(token)
 		{
 		}
 
-		protected override IInternalLogger GetLog()
+		protected override INHibernateLogger GetLog()
 		{
 			return Log;
 		}
@@ -49,6 +51,8 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			}
 		}
 
+		// Since v5.4
+		[Obsolete("This method has no more usage in NHibernate and will be removed in a future version.")]
 		public void SetScalarColumnText(int i)
 		{
 			ColumnHelper.GenerateSingleScalarColumn(ASTFactory, this, i);
@@ -80,6 +84,26 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			set;
 		}
 
+		// Since v5.4
+		[Obsolete("Use overload with aliasCreator parameter instead.")]
+		public void SetScalarColumn(int i)
+		{
+			_scalarColumn = i;
+			SetScalarColumnText(i);
+		}
+
+		/// <inheritdoc />
+		public string[] SetScalarColumn(int i, Func<int, int, string> aliasCreator)
+		{
+			_scalarColumn = i;
+			return new[] {ColumnHelper.GenerateSingleScalarColumn(ASTFactory, this, i, aliasCreator)};
+		}
+
+		public int ScalarColumnIndex
+		{
+			get { return _scalarColumn; }
+		}
+
 		public OrderByClause GetOrderByClause() 
 		{
 			if (_orderByClause == null) 
@@ -94,7 +118,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 
 					// Find the WHERE; if there is no WHERE, find the FROM...
 					IASTNode prevSibling = ASTUtil.FindTypeInChildren(this, HqlSqlWalker.WHERE) ??
-					                       ASTUtil.FindTypeInChildren(this, HqlSqlWalker.FROM);
+										   ASTUtil.FindTypeInChildren(this, HqlSqlWalker.FROM);
 
 					// Now, inject the newly built ORDER BY into the tree
 					prevSibling.AddSibling(_orderByClause);

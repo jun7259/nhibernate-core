@@ -1,5 +1,3 @@
-using System;
-using System.Collections;
 using System.Reflection;
 using NHibernate.Cfg;
 using NHibernate.Criterion;
@@ -16,7 +14,7 @@ namespace NHibernate.Test.Naturalid.Mutable
 			get { return "NHibernate.Test"; }
 		}
 
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get { return new string[] {"Naturalid.Mutable.User.hbm.xml"}; }
 		}
@@ -31,47 +29,39 @@ namespace NHibernate.Test.Naturalid.Mutable
 		[Test]
 		public void ReattachmentNaturalIdCheck()
 		{
-			ISession s = OpenSession();
-			s.BeginTransaction();
-			User u = new User("gavin", "hb", "secret");
-			s.Persist(u);
-			s.Transaction.Commit();
-			s.Close();
+			User u;
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
+			{
+				u = new User("gavin", "hb", "secret");
+				s.Persist(u);
+				t.Commit();
+				s.Close();
+			}
 
 			FieldInfo name = u.GetType().GetField("name",
 			                                      BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
 			name.SetValue(u, "Gavin");
-			s = OpenSession();
-			s.BeginTransaction();
-			try
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
 			{
 				s.Update(u);
-				s.Transaction.Commit();
-			}
-			catch (HibernateException)
-			{
-				s.Transaction.Rollback();
-			}
-			catch (Exception)
-			{
-					s.Transaction.Rollback();
-			}
-			finally
-			{
-				s.Close();
+				t.Commit();
 			}
 
-			s = OpenSession();
-			s.BeginTransaction();
-			s.Delete(u);
-			s.Transaction.Commit();
-			s.Close();
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
+			{
+				s.Delete(u);
+				t.Commit();
+				s.Close();
+			}
 		}
 
 		[Test]
 		public void NonexistentNaturalIdCache()
 		{
-			sessions.Statistics.Clear();
+			Sfi.Statistics.Clear();
 
 			ISession s = OpenSession();
 			ITransaction t = s.BeginTransaction();
@@ -85,9 +75,9 @@ namespace NHibernate.Test.Naturalid.Mutable
 			t.Commit();
 			s.Close();
 
-			Assert.AreEqual(1, sessions.Statistics.QueryExecutionCount);
-			Assert.AreEqual(0, sessions.Statistics.QueryCacheHitCount);
-			Assert.AreEqual(0, sessions.Statistics.QueryCachePutCount);
+			Assert.AreEqual(1, Sfi.Statistics.QueryExecutionCount);
+			Assert.AreEqual(0, Sfi.Statistics.QueryCacheHitCount);
+			Assert.AreEqual(0, Sfi.Statistics.QueryCachePutCount);
 
 			s = OpenSession();
 			t = s.BeginTransaction();
@@ -98,7 +88,7 @@ namespace NHibernate.Test.Naturalid.Mutable
 			t.Commit();
 			s.Close();
 
-			sessions.Statistics.Clear();
+			Sfi.Statistics.Clear();
 
 			s = OpenSession();
 			t = s.BeginTransaction();
@@ -113,11 +103,11 @@ namespace NHibernate.Test.Naturalid.Mutable
 			t.Commit();
 			s.Close();
 
-			Assert.AreEqual(1, sessions.Statistics.QueryExecutionCount);
-			Assert.AreEqual(0, sessions.Statistics.QueryCacheHitCount);
-			Assert.AreEqual(1, sessions.Statistics.QueryCachePutCount);
+			Assert.AreEqual(1, Sfi.Statistics.QueryExecutionCount);
+			Assert.AreEqual(0, Sfi.Statistics.QueryCacheHitCount);
+			Assert.AreEqual(1, Sfi.Statistics.QueryCachePutCount);
 
-			sessions.Statistics.Clear();
+			Sfi.Statistics.Clear();
 
 			s = OpenSession();
 			t = s.BeginTransaction();
@@ -132,10 +122,10 @@ namespace NHibernate.Test.Naturalid.Mutable
 			t.Commit();
 			s.Close();
 
-			Assert.AreEqual(0, sessions.Statistics.QueryExecutionCount);
-			Assert.AreEqual(1, sessions.Statistics.QueryCacheHitCount);
+			Assert.AreEqual(0, Sfi.Statistics.QueryExecutionCount);
+			Assert.AreEqual(1, Sfi.Statistics.QueryCacheHitCount);
 
-			sessions.Statistics.Clear();
+			Sfi.Statistics.Clear();
 
 			s = OpenSession();
 			t = s.BeginTransaction();
@@ -149,9 +139,9 @@ namespace NHibernate.Test.Naturalid.Mutable
 			t.Commit();
 			s.Close();
 
-			Assert.AreEqual(1, sessions.Statistics.QueryExecutionCount);
-			Assert.AreEqual(0, sessions.Statistics.QueryCacheHitCount);
-			Assert.AreEqual(0, sessions.Statistics.QueryCachePutCount);
+			Assert.AreEqual(1, Sfi.Statistics.QueryExecutionCount);
+			Assert.AreEqual(0, Sfi.Statistics.QueryCacheHitCount);
+			Assert.AreEqual(0, Sfi.Statistics.QueryCachePutCount);
 		}
 
 		[Test]
@@ -166,7 +156,7 @@ namespace NHibernate.Test.Naturalid.Mutable
 			t.Commit();
 			s.Close();
 
-			sessions.Statistics.Clear();
+			Sfi.Statistics.Clear();
 
 			s = OpenSession();
 			t = s.BeginTransaction();
@@ -180,9 +170,9 @@ namespace NHibernate.Test.Naturalid.Mutable
 			t.Commit();
 			s.Close();
 
-			Assert.AreEqual(1, sessions.Statistics.QueryExecutionCount);
-			Assert.AreEqual(0, sessions.Statistics.QueryCacheHitCount);
-			Assert.AreEqual(1, sessions.Statistics.QueryCachePutCount);
+			Assert.AreEqual(1, Sfi.Statistics.QueryExecutionCount);
+			Assert.AreEqual(0, Sfi.Statistics.QueryCacheHitCount);
+			Assert.AreEqual(1, Sfi.Statistics.QueryCachePutCount);
 
 			s = OpenSession();
 			t = s.BeginTransaction();
@@ -193,7 +183,7 @@ namespace NHibernate.Test.Naturalid.Mutable
 			t.Commit();
 			s.Close();
 
-			sessions.Statistics.Clear();
+			Sfi.Statistics.Clear();
 
 			s = OpenSession();
 			t = s.BeginTransaction();
@@ -203,19 +193,18 @@ namespace NHibernate.Test.Naturalid.Mutable
 				.SetCacheable(true).UniqueResult();
 
 			Assert.That(u, Is.Not.Null);
-			Assert.AreEqual(1, sessions.Statistics.QueryExecutionCount);
-			Assert.AreEqual(0, sessions.Statistics.QueryCacheHitCount);
+			Assert.AreEqual(1, Sfi.Statistics.QueryExecutionCount);
+			Assert.AreEqual(0, Sfi.Statistics.QueryCacheHitCount);
 
 			u = (User)s.CreateCriteria(typeof(User))
 				.Add(Restrictions.NaturalId().Set("name", "gavin").Set("org", "hb"))
 				.SetCacheable(true).UniqueResult();
 			Assert.That(u, Is.Not.Null);
-			Assert.AreEqual(1, sessions.Statistics.QueryExecutionCount);
-			Assert.AreEqual(1, sessions.Statistics.QueryCacheHitCount);
+			Assert.AreEqual(1, Sfi.Statistics.QueryExecutionCount);
+			Assert.AreEqual(1, Sfi.Statistics.QueryCacheHitCount);
 
 			t.Commit();
 			s.Close();
-
 
 			s = OpenSession();
 			t = s.BeginTransaction();

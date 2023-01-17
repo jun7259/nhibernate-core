@@ -19,6 +19,7 @@ tokens
 	BETWEEN='between';
 	CLASS='class';
 	COUNT='count';
+	CROSS='cross';
 	DELETE='delete';
 	DESCENDING='desc';
 	DOT;
@@ -127,7 +128,11 @@ using NHibernate.Hql.Ast.ANTLR.Tree;
 }
 
 public statement
-	: ( updateStatement | deleteStatement | selectStatement | insertStatement ) EOF!
+	:
+	(
+		{ !filter }? ( updateStatement | deleteStatement | insertStatement ) // DML statements are not allowed for collection-filtering queries
+		| selectStatement
+	) EOF!
 	;
 
 updateStatement
@@ -199,6 +204,12 @@ insertablePropertySpec
 //##     [selectClause] fromClause [whereClause] [groupByClause] [havingClause] [orderByClause] [skipClause] [takeClause];
 
 queryRule
+	@init {
+		++queryDepth;
+	}
+	@after {
+		--queryDepth;
+	}
 	: selectFrom
 		(whereClause)?
 		(groupByClause)?
@@ -211,7 +222,7 @@ queryRule
 selectFrom
 	:  (s=selectClause)? (f=fromClause)? 
 		{
-			if ($f.tree == null && !filter) 
+			if ($f.tree == null && !(filter && queryDepth == 1)) 
 				throw new RecognitionException("FROM expected (non-filter queries must contain a FROM clause)");
 		}
 		-> {$f.tree == null && filter}? ^(SELECT_FROM FROM["{filter-implied FROM}"] selectClause?)
@@ -244,11 +255,16 @@ fromClause
 
 fromJoin
 	: ( ( ( LEFT | RIGHT ) (OUTER)? ) | FULL | INNER )? JOIN^ (FETCH)? path (asAlias)? (propertyFetch)? (withClause)?
+	| ( ( ( LEFT | RIGHT ) (OUTER)? ) | FULL | INNER )? JOIN^ OPEN! selectStatement CLOSE! (asAlias)? (withClause)?
 	| ( ( ( LEFT | RIGHT ) (OUTER)? ) | FULL | INNER )? JOIN^ (FETCH)? ELEMENTS! OPEN! path CLOSE! (asAlias)? (propertyFetch)? (withClause)?
+	| CROSS JOIN^ { WeakKeywords(); } path (asAlias)? (propertyFetch)?
 	;
 
 withClause
 	: WITH^ logicalExpression
+	| ON logicalExpression 
+	// it's really just a WITH clause, so treat it as such...
+		-> ^(WITH["with"] logicalExpression)
 	;
 
 fromRange
@@ -291,7 +307,7 @@ alias
 
 propertyFetch
 	: FETCH ALL! PROPERTIES!
-	;
+	| (FETCH path)+;
 
 groupByClause
 	: GROUP^ 
@@ -514,22 +530,30 @@ unaryExpression
 	;
 	
 caseExpression
-	: CASE (whenClause)+ (elseClause)? END
-		-> ^(CASE whenClause+ elseClause?) 
-	| CASE unaryExpression (altWhenClause)+ (elseClause)? END
-		-> ^(CASE2 unaryExpression altWhenClause+ elseClause?)
+	: simpleCaseStatement
+	| searchedCaseStatement
 	;
-	
-whenClause
-	: (WHEN^ logicalExpression THEN! expression)
+
+simpleCaseStatement
+	: CASE expression (simpleCaseWhenClause)+ (elseClause)? END
+		-> ^(CASE2 expression simpleCaseWhenClause+ elseClause?)
 	;
-	
-altWhenClause
-	: (WHEN^ unaryExpression THEN! expression)
+
+simpleCaseWhenClause
+	: (WHEN^ expression THEN! expression)
 	;
 	
 elseClause
 	: (ELSE^ expression)
+	;
+
+searchedCaseStatement
+	: CASE (searchedCaseWhenClause)+ (elseClause)? END
+		-> ^(CASE searchedCaseWhenClause+ elseClause?)
+	;
+
+searchedCaseWhenClause
+	: (WHEN^ logicalExpression THEN! expression)
 	;
 	
 quantifiedExpression
@@ -576,7 +600,7 @@ vectorExpr
 // NOTE: handleDotIdent() is called immediately after the first IDENT is recognized because
 // the method looks a head to find keywords after DOT and turns them into identifiers.
 identPrimary
-	: identifier { HandleDotIdent(); }
+	: identifier {{ HandleDotIdent(); }}
 			( options {greedy=true;} : DOT^ ( identifier | o=OBJECT { $o.Type = IDENT; } ) )*
 			( ( op=OPEN^ { $op.Type = METHOD_CALL;} exprList CLOSE! )
 			)?
@@ -590,8 +614,8 @@ identPrimary
 //## aggregateFunction:
 //##     COUNT | 'sum' | 'avg' | 'max' | 'min';
 aggregate
-	: ( op=SUM | op=AVG | op=MAX | op=MIN ) OPEN additiveExpression CLOSE
-		-> ^(AGGREGATE[$op] additiveExpression)
+	: ( op=SUM | op=AVG | op=MAX | op=MIN ) OPEN aggregateArgument CLOSE
+		-> ^(AGGREGATE[$op] aggregateArgument)
 	// Special case for count - It's 'parameters' can be keywords.
 	|  COUNT OPEN ( s=STAR | p=aggregateDistinctAll ) CLOSE
 		-> {s == null}? ^(COUNT $p)
@@ -599,10 +623,19 @@ aggregate
 	|  collectionExpr
 	;
 
-aggregateDistinctAll
-	: ( ( DISTINCT | ALL )? ( path | collectionExpr ) )
+aggregateArgument
+	: ( additiveExpression | selectStatement )
 	;
-	
+
+aggregateDistinctAll
+	: ( distinctAll aggregateArgument ) => (distinctAll aggregateArgument)
+	| aggregateArgument
+	;
+
+distinctAll
+	: ( DISTINCT | ALL ) 
+	;
+
 //## collection: ( OPEN query CLOSE ) | ( 'elements'|'indices' OPEN path CLOSE );
 
 collectionExpr
@@ -758,11 +791,11 @@ NUM_INT
 	:   '.' {_type = DOT;}
 			(	('0'..'9')+ (EXPONENT)? (f1=FLOAT_SUFFIX {t=f1;})?
 				{
-					if (t != null && t.Text.ToUpperInvariant().IndexOf('F')>=0)
+					if (t != null && t.Text.IndexOf("F", System.StringComparison.OrdinalIgnoreCase)>=0)
 					{
 						_type = NUM_FLOAT;
 					}
-					else if (t != null && t.Text.ToUpperInvariant().IndexOf('M')>=0)
+					else if (t != null && t.Text.IndexOf("M", System.StringComparison.OrdinalIgnoreCase)>=0)
 					{
 						_type = NUM_DECIMAL;
 					}
@@ -796,11 +829,11 @@ NUM_INT
 			|   f4=FLOAT_SUFFIX {t=f4;}
 			)
 			{
-				if (t != null && t.Text.ToUpperInvariant().IndexOf('F') >= 0)
+				if (t != null && t.Text.IndexOf("F", System.StringComparison.OrdinalIgnoreCase) >= 0)
 				{
 					_type = NUM_FLOAT;
 				}
-				else if (t != null && t.Text.ToUpperInvariant().IndexOf('M')>=0)
+				else if (t != null && t.Text.IndexOf("M", System.StringComparison.OrdinalIgnoreCase)>=0)
 				{
 					_type = NUM_DECIMAL;
 				}

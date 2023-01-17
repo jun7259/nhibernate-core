@@ -7,7 +7,7 @@ namespace NHibernate.Test.CollectionTest
 	[TestFixture]
 	public class NullableValueTypeElementMapFixture : TestCase
 	{
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get { return new[] {"CollectionTest.NullableValueTypeElementMapFixture.hbm.xml"}; }
 		}
@@ -19,7 +19,7 @@ namespace NHibernate.Test.CollectionTest
 
 		protected override void OnTearDown()
 		{
-			using (var s = sessions.OpenSession())
+			using (var s = Sfi.OpenSession())
 			{
 				s.Delete("from Parent");
 				s.Flush();

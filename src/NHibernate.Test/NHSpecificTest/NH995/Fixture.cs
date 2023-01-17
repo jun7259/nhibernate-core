@@ -6,13 +6,7 @@ namespace NHibernate.Test.NHSpecificTest.NH995
 	[TestFixture]
 	public class Fixture : BugTestCase
 	{
-		public override string BugNumber
-		{
-			get
-			{
-				return "NH995";
-			}
-		}
+		protected override string CacheConcurrencyStrategy => "nonstrict-read-write";
 
 		protected override void OnTearDown()
 		{
@@ -55,9 +49,9 @@ namespace NHibernate.Test.NHSpecificTest.NH995
 			}
 
 			// Clear the cache
-			sessions.Evict(typeof(ClassA));
-			sessions.Evict(typeof(ClassB));
-			sessions.Evict(typeof(ClassC));
+			Sfi.Evict(typeof(ClassA));
+			Sfi.Evict(typeof(ClassB));
+			Sfi.Evict(typeof(ClassC));
 			
 			using(ISession s = OpenSession())
 			using (ITransaction tx = s.BeginTransaction())

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using NHibernate.Engine;
 using NHibernate.SqlCommand;
@@ -10,6 +9,7 @@ namespace NHibernate.Criterion
 	/// <summary>
 	/// An <see cref="ICriterion"/> that creates a SQLExpression.
 	/// The string {alias} will be replaced by the alias of the root entity.
+	/// Criteria aliases can also be used: "{a}.Value + {bc}.Value".
 	/// </summary>
 	/// <remarks>
 	/// This allows for database specific Expressions at the cost of needing to 
@@ -27,11 +27,11 @@ namespace NHibernate.Criterion
 			_typedValues = new TypedValue[values.Length];
 			for (int i = 0; i < _typedValues.Length; i++)
 			{
-				_typedValues[i] = new TypedValue(types[i], values[i], EntityMode.Poco);
+				_typedValues[i] = new TypedValue(types[i], values[i]);
 			}
 		}
 
-		public override SqlString ToSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery, IDictionary<string, IFilter> enabledFilters)
+		public override SqlString ToSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery)
 		{
 			var parameters = _sql.GetParameters().ToList();
 			var paramPos = 0;
@@ -43,7 +43,7 @@ namespace NHibernate.Criterion
 					parameters[paramPos++].BackTrack = parameter.BackTrack;
 				}
 			}
-			return _sql.Replace("{alias}", criteriaQuery.GetSQLAlias(criteria));
+			return criteriaQuery.RenderSQLAliases(_sql).Replace("{alias}", criteriaQuery.GetSQLAlias(criteria));
 		}
 
 		public override TypedValue[] GetTypedValues(ICriteria criteria, ICriteriaQuery criteriaQuery)

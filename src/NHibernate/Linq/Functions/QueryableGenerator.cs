@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Linq.Expressions;
@@ -14,13 +15,15 @@ namespace NHibernate.Linq.Functions
 		public AnyHqlGenerator()
 		{
 			SupportedMethods = new[]
-			                   	{
-			                   		ReflectionHelper.GetMethodDefinition(() => Queryable.Any<object>(null)),
-			                   		ReflectionHelper.GetMethodDefinition(() => Queryable.Any<object>(null, null)),
-			                   		ReflectionHelper.GetMethodDefinition(() => Enumerable.Any<object>(null)),
-			                   		ReflectionHelper.GetMethodDefinition(() => Enumerable.Any<object>(null, null))
-			                   	};
+			{
+				ReflectionCache.QueryableMethods.AnyDefinition,
+				ReflectionCache.QueryableMethods.AnyWithPredicateDefinition,
+				ReflectHelper.FastGetMethodDefinition(Enumerable.Any, default(IEnumerable<object>)),
+				ReflectHelper.FastGetMethodDefinition(Enumerable.Any, default(IEnumerable<object>), default(Func<object, bool>))
+			};
 		}
+
+		public override bool AllowsNullableReturnType(MethodInfo method) => false;
 
 		public override HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
 		{
@@ -53,11 +56,13 @@ namespace NHibernate.Linq.Functions
 		public AllHqlGenerator()
 		{
 			SupportedMethods = new[]
-			                   	{
-			                   		ReflectionHelper.GetMethodDefinition(() => Queryable.All<object>(null, null)),
-			                   		ReflectionHelper.GetMethodDefinition(() => Enumerable.All<object>(null, null))
-			                   	};
+			{
+				ReflectionCache.QueryableMethods.AllDefinition,
+				ReflectHelper.FastGetMethodDefinition(Enumerable.All, default(IEnumerable<object>), default(Func<object, bool>))
+			};
 		}
+
+		public override bool AllowsNullableReturnType(MethodInfo method) => false;
 
 		public override HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
 		{
@@ -75,7 +80,7 @@ namespace NHibernate.Linq.Functions
 								)
 							),
 						treeBuilder.Where(
-							treeBuilder.BooleanNot(visitor.Visit(arguments[1]).AsBooleanExpression())
+							treeBuilder.BooleanNot(visitor.Visit(arguments[1]).ToBooleanExpression())
 							)
 						)
 					)
@@ -88,10 +93,10 @@ namespace NHibernate.Linq.Functions
 		public MinHqlGenerator()
 		{
 			SupportedMethods = new[]
-			                   	{
-			                   		ReflectionHelper.GetMethodDefinition(() => Queryable.Min<object>(null)),
-			                   		ReflectionHelper.GetMethodDefinition(() => Enumerable.Min<object>(null))
-			                   	};
+			{
+				ReflectionCache.QueryableMethods.MinDefinition,
+				ReflectionCache.EnumerableMethods.MinDefinition
+			};
 		}
 
 		public override HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
@@ -105,10 +110,10 @@ namespace NHibernate.Linq.Functions
 		public MaxHqlGenerator()
 		{
 			SupportedMethods = new[]
-			                   	{
-			                   		ReflectionHelper.GetMethodDefinition(() => Queryable.Max<object>(null)),
-			                   		ReflectionHelper.GetMethodDefinition(() => Enumerable.Max<object>(null))
-			                   	};
+			{
+				ReflectionCache.QueryableMethods.MaxDefinition,
+				ReflectionCache.EnumerableMethods.MaxDefinition,
+			};
 		}
 
 		public override HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
@@ -142,10 +147,21 @@ namespace NHibernate.Linq.Functions
 		public CollectionContainsGenerator()
 		{
 			SupportedMethods = new[]
-			                   	{
-			                   		ReflectionHelper.GetMethodDefinition(() => Queryable.Contains<object>(null, null)),
-			                   		ReflectionHelper.GetMethodDefinition(() => Enumerable.Contains<object>(null, null))
-			                   	};
+			{
+				ReflectHelper.FastGetMethodDefinition(Queryable.Contains, default(IQueryable<object>), default(object)),
+				ReflectHelper.FastGetMethodDefinition(Enumerable.Contains, default(IEnumerable<object>), default(object))
+			};
+		}
+
+		public override bool AllowsNullableReturnType(MethodInfo method) => false;
+
+		/// <inheritdoc />
+		public override bool TryGetCollectionParameter(MethodCallExpression expression, out ConstantExpression collectionParameter)
+		{
+			var argument = expression.Method.IsStatic ? expression.Arguments[0] : expression.Object;
+			collectionParameter = argument as ConstantExpression;
+
+			return collectionParameter != null;
 		}
 
 		public override HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)

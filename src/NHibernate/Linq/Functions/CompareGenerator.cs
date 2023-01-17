@@ -6,41 +6,50 @@ using System.Reflection;
 using NHibernate.Hql.Ast;
 using NHibernate.Linq.Visitors;
 using System.Linq;
+using NHibernate.Util;
 
 namespace NHibernate.Linq.Functions
 {
 	internal class CompareGenerator : BaseHqlGeneratorForMethod, IRuntimeMethodHqlGenerator
 	{
+		private static readonly MethodInfo MethodWithComparer = ReflectHelper.FastGetMethod(string.Compare, default(string), default(string), default(StringComparison));
+
 		private static readonly HashSet<MethodInfo> ActingMethods = new HashSet<MethodInfo>
 			{
-				ReflectionHelper.GetMethodDefinition(() => string.Compare(null, null)),
-				ReflectionHelper.GetMethodDefinition<string>(s => s.CompareTo(s)),
-				ReflectionHelper.GetMethodDefinition<char>(x => x.CompareTo(x)),
+				ReflectHelper.FastGetMethod(string.Compare, default(string), default(string)),
+				MethodWithComparer,
+				ReflectHelper.GetMethodDefinition<string>(s => s.CompareTo(s)),
+				ReflectHelper.GetMethodDefinition<char>(x => x.CompareTo(x)),
 
-				ReflectionHelper.GetMethodDefinition<byte>(x => x.CompareTo(x)),
-				ReflectionHelper.GetMethodDefinition<sbyte>(x => x.CompareTo(x)),
+				ReflectHelper.GetMethodDefinition<byte>(x => x.CompareTo(x)),
+				ReflectHelper.GetMethodDefinition<sbyte>(x => x.CompareTo(x)),
 				
-				ReflectionHelper.GetMethodDefinition<short>(x => x.CompareTo(x)),
-				ReflectionHelper.GetMethodDefinition<ushort>(x => x.CompareTo(x)),
+				ReflectHelper.GetMethodDefinition<short>(x => x.CompareTo(x)),
+				ReflectHelper.GetMethodDefinition<ushort>(x => x.CompareTo(x)),
 
-				ReflectionHelper.GetMethodDefinition<int>(x => x.CompareTo(x)),
-				ReflectionHelper.GetMethodDefinition<uint>(x => x.CompareTo(x)),
+				ReflectHelper.GetMethodDefinition<int>(x => x.CompareTo(x)),
+				ReflectHelper.GetMethodDefinition<uint>(x => x.CompareTo(x)),
 
-				ReflectionHelper.GetMethodDefinition<long>(x => x.CompareTo(x)),
-				ReflectionHelper.GetMethodDefinition<ulong>(x => x.CompareTo(x)),
+				ReflectHelper.GetMethodDefinition<long>(x => x.CompareTo(x)),
+				ReflectHelper.GetMethodDefinition<ulong>(x => x.CompareTo(x)),
 
-				ReflectionHelper.GetMethodDefinition<float>(x => x.CompareTo(x)),
-				ReflectionHelper.GetMethodDefinition<double>(x => x.CompareTo(x)),
-				ReflectionHelper.GetMethodDefinition<decimal>(x => x.CompareTo(x)),
+				ReflectHelper.GetMethodDefinition<float>(x => x.CompareTo(x)),
+				ReflectHelper.GetMethodDefinition<double>(x => x.CompareTo(x)),
+				
+				ReflectHelper.FastGetMethod(decimal.Compare, default(decimal), default(decimal)),
+				ReflectHelper.GetMethodDefinition<decimal>(x => x.CompareTo(x)),
 
-				ReflectionHelper.GetMethodDefinition<DateTime>(x => x.CompareTo(x)),
-				ReflectionHelper.GetMethodDefinition<DateTimeOffset>(x => x.CompareTo(x)),
+				ReflectHelper.GetMethodDefinition<DateTime>(x => x.CompareTo(x)),
+				ReflectHelper.GetMethodDefinition<DateTimeOffset>(x => x.CompareTo(x)),
 			};
 
 		internal static bool IsCompareMethod(MethodInfo methodInfo)
 		{
 			if (ActingMethods.Contains(methodInfo))
+			{
+				LogIgnoredStringComparisonParameter(methodInfo, MethodWithComparer);
 				return true;
+			}
 
 			// This is .Net 4 only, and in the System.Data.Services assembly, which we don't depend directly on.
 			return methodInfo != null && methodInfo.Name == "Compare" &&
@@ -48,7 +57,7 @@ namespace NHibernate.Linq.Functions
 				   methodInfo.DeclaringType.FullName == "System.Data.Services.Providers.DataServiceProviderMethods";
 		}
 
-
+		public override bool AllowsNullableReturnType(MethodInfo method) => false;
 		public CompareGenerator()
 		{
 			SupportedMethods = ActingMethods.ToArray();
@@ -78,7 +87,6 @@ namespace NHibernate.Linq.Functions
 				treeBuilder.Constant(-1));
 		}
 
-
 		#region IRuntimeMethodHqlGenerator methods
 
 		public bool SupportsMethod(MethodInfo method)
@@ -91,7 +99,6 @@ namespace NHibernate.Linq.Functions
 			return IsCompareMethod(method);
 		}
 
-		
 		public IHqlGeneratorForMethod GetMethodGenerator(MethodInfo method)
 		{
 			return this;

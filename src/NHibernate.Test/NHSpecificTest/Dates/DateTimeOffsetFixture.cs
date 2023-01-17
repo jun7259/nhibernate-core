@@ -1,8 +1,12 @@
 ﻿using System;
 using System.Collections;
 using System.Data;
+using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Xml.Serialization;
 using NHibernate.Driver;
 using NHibernate.Type;
+using NHibernate.Util;
 using NUnit.Framework;
 
 namespace NHibernate.Test.NHSpecificTest.Dates
@@ -10,7 +14,7 @@ namespace NHibernate.Test.NHSpecificTest.Dates
 	[TestFixture]
 	public class DateTimeOffsetFixture : FixtureBase
 	{
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get { return new[] { "NHSpecificTest.Dates.Mappings.DateTimeOffset.hbm.xml" }; }
 		}
@@ -29,10 +33,12 @@ namespace NHibernate.Test.NHSpecificTest.Dates
 			return DbType.DateTimeOffset;
 		}
 
+		protected virtual long DateAccuracyInTicks => Dialect.TimestampResolutionInTicks;
+
 		[Test]
 		public void SavingAndRetrievingTest()
 		{
-			DateTimeOffset NowOS = DateTimeOffset.Now;
+			var NowOS = DateTimeOffsetType.Round(DateTimeOffset.Now, DateAccuracyInTicks);
 
 			AllDates dates = new AllDates { Sql_datetimeoffset = NowOS };
 
@@ -81,7 +87,7 @@ namespace NHibernate.Test.NHSpecificTest.Dates
 			var type = new DateTimeOffsetType();
 			var now = DateTimeOffset.Now;
 			var exactClone = new DateTimeOffset(now.Ticks, now.Offset);
-			Assert.That((now.GetHashCode() == exactClone.GetHashCode()), Is.EqualTo(now.GetHashCode() == type.GetHashCode(exactClone, EntityMode.Poco)));
+			Assert.That((now.GetHashCode() == exactClone.GetHashCode()), Is.EqualTo(now.GetHashCode() == type.GetHashCode(exactClone)));
 		}
 
 		[Test]
@@ -101,5 +107,37 @@ namespace NHibernate.Test.NHSpecificTest.Dates
 			Assert.That(type.Seed(null), Is.TypeOf<DateTimeOffset>());
 		}
 
+		[Test(Description = "NH-3842")]
+		public void DefaultValueDoesNotThrowException()
+		{
+			var type = NHibernateUtil.DateTimeOffset;
+
+			Assert.That(() => type.DefaultValue, Throws.Nothing);
+		}
+
+		[Test(Description = "NH-3842")]
+		public void CanBinarySerialize()
+		{
+			var type = NHibernateUtil.DateTimeOffset;
+
+			var formatter = new BinaryFormatter
+			{
+#if !NETFX
+				SurrogateSelector = new SerializationHelper.SurrogateSelector()	
+#endif
+			};
+
+			Assert.That(() => formatter.Serialize(Stream.Null, type), Throws.Nothing);
+		}
+
+		[Test(Description = "NH-3842")]
+		public void CanXmlSerialize()
+		{
+			var type = NHibernateUtil.DateTimeOffset;
+
+			var formatter = new XmlSerializer(typeof(DateTimeOffsetType));
+
+			Assert.That(() => formatter.Serialize(Stream.Null, type), Throws.Nothing);
+		}
 	}
 }

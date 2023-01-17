@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using NHibernate.Criterion;
 using NHibernate.Engine;
+using NHibernate.Multi;
 using NHibernate.SqlCommand;
 using NHibernate.Transform;
 using NHibernate.Util;
@@ -14,13 +15,15 @@ namespace NHibernate.Impl
 	/// Implementation of the <see cref="ICriteria"/> interface
 	/// </summary>
 	[Serializable]
-	public class CriteriaImpl : ICriteria
+	public partial class CriteriaImpl : ICriteria, ISupportEntityJoinCriteria, ISupportSelectModeCriteria
 	{
 		private readonly System.Type persistentClass;
 		private readonly List<CriterionEntry> criteria = new List<CriterionEntry>();
 		private readonly List<OrderEntry> orderEntries = new List<OrderEntry>(10);
-		private readonly Dictionary<string, FetchMode> fetchModes = new Dictionary<string, FetchMode>();
+		private readonly Dictionary<string, SelectMode> selectModes = new Dictionary<string, SelectMode>();
 		private readonly Dictionary<string, LockMode> lockModes = new Dictionary<string, LockMode>();
+		private readonly Dictionary<string, HashSet<string>> _entityFetchLazyProperties = new Dictionary<string, HashSet<string>>();
+
 		private int maxResults = RowSelection.NoValue;
 		private int firstResult;
 		private int timeout = RowSelection.NoValue;
@@ -60,7 +63,7 @@ namespace NHibernate.Impl
 		}
 
 		public CriteriaImpl(string entityOrClassName, ISessionImplementor session)
-			: this(entityOrClassName, CriteriaSpecification.RootAlias, session) {}
+			: this(entityOrClassName, CriteriaSpecification.RootAlias, session) { }
 
 		public CriteriaImpl(string entityOrClassName, string alias, ISessionImplementor session)
 		{
@@ -123,13 +126,13 @@ namespace NHibernate.Impl
 		{
 			get { return projection; }
 		}
-		
+
 		/// <inheritdoc />
 		public bool IsReadOnlyInitialized
 		{
 			get { return (readOnly != null); }
 		}
-		
+
 		/// <inheritdoc />
 		public bool IsReadOnly
 		{
@@ -142,14 +145,37 @@ namespace NHibernate.Impl
 			}
 		}
 
+		//Since 5.2
+		[Obsolete("Use GetSelectMode instead")]
 		public FetchMode GetFetchMode(string path)
 		{
-			FetchMode result;
-			if (!fetchModes.TryGetValue(path, out result))
+			switch (GetSelectMode(path))
 			{
-				result = FetchMode.Default;
+				case SelectMode.Undefined:
+					return FetchMode.Default;
+				case SelectMode.Skip:
+					return FetchMode.Lazy;
+				default:
+					return FetchMode.Join;
+			}
+		}
+
+		public SelectMode GetSelectMode(string path)
+		{
+			if (!selectModes.TryGetValue(path, out var result))
+			{
+				result = SelectMode.Undefined;
 			}
 			return result;
+		}
+
+		public HashSet<string> GetEntityFetchLazyProperties(string path)
+		{
+			if (_entityFetchLazyProperties.TryGetValue(path, out var result))
+			{
+				return result;
+			}
+			return null;
 		}
 
 		public IResultTransformer ResultTransformer
@@ -186,6 +212,8 @@ namespace NHibernate.Impl
 		{
 			get { return cacheRegion; }
 		}
+
+		public CacheMode? CacheMode => cacheMode;
 
 		public string Comment
 		{
@@ -252,17 +280,20 @@ namespace NHibernate.Impl
 
 		public IList List()
 		{
-			var results = new List<object>();
-			List(results);
-			return results;
+			return List<object>().ToIList();
 		}
 
 		public void List(IList results)
 		{
+			ArrayHelper.AddAll(results, List());
+		}
+
+		public IList<T> List<T>()
+		{
 			Before();
 			try
 			{
-				session.List(this, results);
+				return session.List<T>(this);
 			}
 			finally
 			{
@@ -270,17 +301,10 @@ namespace NHibernate.Impl
 			}
 		}
 
-		public IList<T> List<T>()
-		{
-			List<T> results = new List<T>();
-			List(results);
-			return results;
-		}
-
 		public T UniqueResult<T>()
 		{
 			object result = UniqueResult();
-			if (result == null && typeof (T).IsValueType)
+			if (result == null && typeof(T).IsValueType)
 			{
 				return default(T);
 			}
@@ -340,35 +364,61 @@ namespace NHibernate.Impl
 			return builder.ToString();
 		}
 
-        public string ToHqlString()
-        {
-            bool first = true;
-            StringBuilder builder = new StringBuilder();
-            foreach (CriterionEntry criterionEntry in criteria)
-            {
-                if (!first)
-                {
-                    builder.Append(" and ");
-                }
-                builder.Append(criterionEntry.ToHqlString());
-                first = false;
-            }
-            if (orderEntries.Count != 0)
-            {
-                builder.AppendLine();
-            }
-            first = true;
-            foreach (OrderEntry orderEntry in orderEntries)
-            {
-                if (!first)
-                {
-                    builder.Append(" and ");
-                }
-                builder.Append(orderEntry.ToString());
-                first = false;
-            }
-            return builder.ToString();
-        }
+		public string ToHqlString()
+		{
+			bool first = true;
+			StringBuilder builder = new StringBuilder();
+			foreach (CriterionEntry criterionEntry in criteria)
+			{
+				if (!first)
+				{
+					builder.Append(" and ");
+				}
+				builder.Append(criterionEntry.ToHqlString());
+				first = false;
+			}
+			if (orderEntries.Count != 0)
+			{
+				builder.AppendLine();
+			}
+			first = true;
+			foreach (OrderEntry orderEntry in orderEntries)
+			{
+				if (!first)
+				{
+					builder.Append(" and ");
+				}
+				builder.Append(orderEntry.ToString());
+				first = false;
+			}
+			return builder.ToString();
+		}
+
+		public ICriteria Fetch(SelectMode selectMode, string associationPath, string alias)
+		{
+			if (!string.IsNullOrEmpty(alias))
+			{
+				var criteriaByAlias = GetCriteriaByAlias(alias);
+				criteriaByAlias.Fetch(selectMode, associationPath, null);
+				return this;
+			}
+
+			if (selectMode == SelectMode.FetchLazyPropertyGroup)
+			{
+				StringHelper.ParsePathAndPropertyName(associationPath, out associationPath, out var propertyName);
+				if (_entityFetchLazyProperties.TryGetValue(associationPath, out var propertyNames))
+				{
+					propertyNames.Add(propertyName);
+				}
+				else
+				{
+					_entityFetchLazyProperties[associationPath] = new HashSet<string> { propertyName };
+				}
+			}
+
+			selectModes[associationPath] = selectMode;
+			return this;
+		}
 
 		public ICriteria AddOrder(Order ordering)
 		{
@@ -376,10 +426,32 @@ namespace NHibernate.Impl
 			return this;
 		}
 
+		//Since 5.2
+		[Obsolete("Use Fetch instead")]
 		public ICriteria SetFetchMode(string associationPath, FetchMode mode)
 		{
-			fetchModes[associationPath] = mode;
+			Fetch(GetSelectMode(mode), associationPath, null);
 			return this;
+		}
+
+		//Since 5.2
+		[Obsolete]
+		private SelectMode GetSelectMode(FetchMode mode)
+		{
+			switch (mode)
+			{
+				case FetchMode.Default:
+					return SelectMode.Undefined;
+
+				case FetchMode.Select:
+					return SelectMode.Skip;
+
+				case FetchMode.Join:
+					return SelectMode.Fetch;
+
+				default:
+					throw new ArgumentOutOfRangeException(nameof(mode), mode, null);
+			}
 		}
 
 		public ICriteria CreateAlias(string associationPath, string alias)
@@ -398,6 +470,11 @@ namespace NHibernate.Impl
 		{
 			new Subcriteria(this, this, associationPath, alias, joinType, withClause);
 			return this;
+		}
+
+		public ICriteria CreateEntityCriteria(string alias, ICriterion withClause, JoinType joinType, string entityName)
+		{
+			return new Subcriteria(this, this, alias, alias, joinType, withClause, entityName);
 		}
 
 		public ICriteria Add(ICriteria criteriaInst, ICriterion expression)
@@ -433,24 +510,12 @@ namespace NHibernate.Impl
 
 		public IFutureValue<T> FutureValue<T>()
 		{
-			if (!session.Factory.ConnectionProvider.Driver.SupportsMultipleQueries)
-			{
-				return new FutureValue<T>(List<T>);
-			}
-
-			session.FutureCriteriaBatch.Add<T>(this);
-			return session.FutureCriteriaBatch.GetFutureValue<T>();
+			return session.GetFutureBatch().AddAsFutureValue<T>(this);
 		}
 
-		public IEnumerable<T> Future<T>()
+		public IFutureEnumerable<T> Future<T>()
 		{
-			if (!session.Factory.ConnectionProvider.Driver.SupportsMultipleQueries)
-			{
-				return List<T>();
-			}
-
-			session.FutureCriteriaBatch.Add<T>(this);
-			return session.FutureCriteriaBatch.GetEnumerator<T>();
+			return session.GetFutureBatch().AddAsFuture<T>(this);
 		}
 
 		public object UniqueResult()
@@ -501,12 +566,12 @@ namespace NHibernate.Impl
 
 		public ICriteria SetProjection(params IProjection[] projections)
 		{
-			if(projections==null)
+			if (projections == null)
 				throw new ArgumentNullException("projections");
-			if(projections.Length ==0)
+			if (projections.Length == 0)
 				throw new ArgumentException("projections must contain a least one projection");
 
-			if(projections.Length==1)
+			if (projections.Length == 1)
 			{
 				projection = projections[0];
 			}
@@ -557,14 +622,11 @@ namespace NHibernate.Impl
 				clone = new CriteriaImpl(entityOrClassName, Alias, Session);
 			}
 			CloneSubcriteria(clone);
-			foreach (KeyValuePair<string, FetchMode> de in fetchModes)
-			{
-				clone.fetchModes.Add(de.Key, de.Value);
-			}
 			foreach (KeyValuePair<string, LockMode> de in lockModes)
 			{
 				clone.lockModes.Add(de.Key, de.Value);
 			}
+			clone.selectModes.AddOrOverride(selectModes);
 			clone.maxResults = maxResults;
 			clone.firstResult = firstResult;
 			clone.timeout = timeout;
@@ -575,6 +637,7 @@ namespace NHibernate.Impl
 			CloneProjectCrtieria(clone);
 			clone.SetResultTransformer(resultTransformer);
 			clone.comment = comment;
+			clone.readOnly = readOnly;
 			if (flushMode.HasValue)
 			{
 				clone.SetFlushMode(flushMode.Value);
@@ -618,7 +681,7 @@ namespace NHibernate.Impl
 						"Could not find parent for subcriteria in the previous subcriteria. If you see this error, it is a bug");
 				}
 				Subcriteria clonedSubCriteria =
-					new Subcriteria(clone, currentParent, subcriteria.Path, subcriteria.Alias, subcriteria.JoinType, subcriteria.WithClause);
+					new Subcriteria(clone, currentParent, subcriteria.Path, subcriteria.Alias, subcriteria.JoinType, subcriteria.WithClause, subcriteria.JoinEntityName);
 				clonedSubCriteria.SetLockMode(subcriteria.LockMode);
 				newParents[subcriteria] = clonedSubCriteria;
 			}
@@ -664,7 +727,7 @@ namespace NHibernate.Impl
 		}
 
 		[Serializable]
-		public sealed class Subcriteria : ICriteria
+		public sealed partial class Subcriteria : ICriteria, ISupportSelectModeCriteria
 		{
 			// Added to simulate Java-style inner class
 			private readonly CriteriaImpl root;
@@ -675,8 +738,9 @@ namespace NHibernate.Impl
 			private LockMode lockMode;
 			private readonly JoinType joinType;
 			private ICriterion withClause;
+			private bool hasRestrictions;
 
-			internal Subcriteria(CriteriaImpl root, ICriteria parent, string path, string alias, JoinType joinType, ICriterion withClause)
+			internal Subcriteria(CriteriaImpl root, ICriteria parent, string path, string alias, JoinType joinType, ICriterion withClause, string joinEntityName = null)
 			{
 				this.root = root;
 				this.parent = parent;
@@ -684,6 +748,8 @@ namespace NHibernate.Impl
 				this.path = path;
 				this.joinType = joinType;
 				this.withClause = withClause;
+				JoinEntityName = joinEntityName;
+				hasRestrictions = withClause != null;
 
 				root.subcriteriaList.Add(this);
 
@@ -692,10 +758,20 @@ namespace NHibernate.Impl
 			}
 
 			internal Subcriteria(CriteriaImpl root, ICriteria parent, string path, string alias, JoinType joinType)
-				: this(root, parent, path, alias, joinType, null) {}
+				: this(root, parent, path, alias, joinType, null) { }
 
 			internal Subcriteria(CriteriaImpl root, ICriteria parent, string path, JoinType joinType)
 				: this(root, parent, path, null, joinType) { }
+
+			/// <summary>
+			/// Entity name for "Entity Join" - join for entity with not mapped association
+			/// </summary>
+			public string JoinEntityName { get; }
+
+			/// <summary>
+			/// Is this an Entity join for not mapped association
+			/// </summary>
+			public bool IsEntityJoin => JoinEntityName != null;
 
 			public ICriterion WithClause
 			{
@@ -705,6 +781,11 @@ namespace NHibernate.Impl
 			public string Path
 			{
 				get { return path; }
+			}
+
+			public bool HasRestrictions
+			{
+				get { return hasRestrictions; }
 			}
 
 			public ICriteria Parent
@@ -732,12 +813,12 @@ namespace NHibernate.Impl
 			{
 				get { return root.IsReadOnlyInitialized; }
 			}
-			
+
 			public bool IsReadOnly
 			{
 				get { return root.IsReadOnly; }
 			}
-				
+
 			public ICriteria SetLockMode(LockMode lockMode)
 			{
 				this.lockMode = lockMode;
@@ -746,6 +827,7 @@ namespace NHibernate.Impl
 
 			public ICriteria Add(ICriterion expression)
 			{
+				hasRestrictions = true;
 				root.Add(this, expression);
 				return this;
 			}
@@ -820,7 +902,7 @@ namespace NHibernate.Impl
 				return root.FutureValue<T>();
 			}
 
-			public IEnumerable<T> Future<T>()
+			public IFutureEnumerable<T> Future<T>()
 			{
 				return root.Future<T>();
 			}
@@ -837,16 +919,7 @@ namespace NHibernate.Impl
 
 			public T UniqueResult<T>()
 			{
-				object result = UniqueResult();
-				if (result == null && typeof (T).IsValueType)
-				{
-					throw new InvalidCastException(
-						"UniqueResult<T>() cannot cast null result to value type. Call UniqueResult<T?>() instead");
-				}
-				else
-				{
-					return (T) result;
-				}
+				return root.UniqueResult<T>();
 			}
 
 			public void ClearOrders()
@@ -859,9 +932,23 @@ namespace NHibernate.Impl
 				return root.UniqueResult();
 			}
 
+			//Since 5.2
+			[Obsolete("Use Fetch instead")]
 			public ICriteria SetFetchMode(string associationPath, FetchMode mode)
 			{
 				root.SetFetchMode(StringHelper.Qualify(path, associationPath), mode);
+				return this;
+			}
+
+			public ICriteria Fetch(SelectMode selectMode, string associationPath, string alias)
+			{
+				if (!string.IsNullOrEmpty(alias))
+				{
+					root.Fetch(selectMode, associationPath, alias);
+					return this;
+				}
+
+				root.Fetch(selectMode, string.IsNullOrEmpty(associationPath) ? path : StringHelper.Qualify(path, associationPath), null);
 				return this;
 			}
 
@@ -927,13 +1014,13 @@ namespace NHibernate.Impl
 				root.SetProjection(projections);
 				return this;
 			}
-			
+
 			public ICriteria SetReadOnly(bool readOnly)
 			{
 				root.SetReadOnly(readOnly);
 				return this;
 			}
-			
+
 			public ICriteria GetCriteriaByPath(string path)
 			{
 				return root.GetCriteriaByPath(path);
@@ -1000,10 +1087,10 @@ namespace NHibernate.Impl
 				return criterion.ToString();
 			}
 
-            public string ToHqlString()
-            {
-                return criterion.ToHqlString();
-            }
+			public string ToHqlString()
+			{
+				return criterion.ToHqlString();
+			}
 		}
 
 		[Serializable]

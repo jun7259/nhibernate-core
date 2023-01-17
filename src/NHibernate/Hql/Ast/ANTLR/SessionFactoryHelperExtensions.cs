@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using NHibernate.Dialect.Function;
 using NHibernate.Engine;
 using NHibernate.Hql.Ast.ANTLR.Tree;
@@ -9,6 +11,7 @@ using NHibernate.SqlCommand;
 using NHibernate.Type;
 using NHibernate.Util;
 using IASTNode=NHibernate.Hql.Ast.ANTLR.Tree.IASTNode;
+using IQueryable = NHibernate.Persister.Entity.IQueryable;
 
 namespace NHibernate.Hql.Ast.ANTLR
 {
@@ -32,7 +35,7 @@ namespace NHibernate.Hql.Ast.ANTLR
 
 		public ISessionFactoryImplementor Factory
 		{
-			get { return _sfi;}
+			get { return _sfi; }
 		}
 
 		/// <summary>
@@ -42,7 +45,7 @@ namespace NHibernate.Hql.Ast.ANTLR
 		/// <returns>The sql function, or null if not found.</returns>
 		public ISQLFunction FindSQLFunction(string functionName)
 		{
-			return _sfi.SQLFunctionRegistry.FindSQLFunction(functionName.ToLowerInvariant());
+			return _sfi.SQLFunctionRegistry.FindSQLFunction(functionName);
 		}
 
 		/// <summary>
@@ -67,6 +70,8 @@ namespace NHibernate.Hql.Ast.ANTLR
 		/// <param name="functionName">The function name.</param>
 		/// <param name="first">The first argument expression.</param>
 		/// <returns>the function return type given the function name and the first argument expression node.</returns>
+		// Since v5.3
+		[Obsolete("Please use overload with a IEnumerable<IASTNode> parameter instead.")]
 		public IType FindFunctionReturnType(String functionName, IASTNode first)
 		{
 			// locate the registered function by the given name
@@ -77,7 +82,7 @@ namespace NHibernate.Hql.Ast.ANTLR
 
 			if (first != null)
 			{
-				if (functionName == "cast")
+				if (sqlFunction is CastFunction)
 				{
 					argumentType = TypeFactory.HeuristicType(first.NextSibling.Text);
 				}
@@ -88,6 +93,44 @@ namespace NHibernate.Hql.Ast.ANTLR
 			}
 
 			return sqlFunction.ReturnType(argumentType, _sfi);
+		}
+
+		/// <summary>
+		/// Find the function return type given the function name and the arguments expression nodes.
+		/// </summary>
+		/// <param name="functionName">The function name.</param>
+		/// <param name="arguments">The function arguments expression nodes.</param>
+		/// <returns>The function return type given the function name and the arguments expression nodes.</returns>
+		public IType FindFunctionReturnType(string functionName, IEnumerable<IASTNode> arguments)
+		{
+			var sqlFunction = RequireSQLFunction(functionName);
+			if (!(sqlFunction is ISQLFunctionExtended extendedSqlFunction))
+			{
+#pragma warning disable 618
+				return FindFunctionReturnType(functionName, arguments.FirstOrDefault());
+#pragma warning restore 618
+			}
+
+			var argumentTypes = new List<IType>();
+			if (sqlFunction is CastFunction)
+			{
+				argumentTypes.Add(TypeFactory.HeuristicType(arguments.First().NextSibling.Text));
+			}
+			else
+			{
+				foreach (var argument in arguments)
+				{
+					IType type = null;
+					if (argument is SqlNode sqlNode)
+					{
+						type = sqlNode.DataType;
+					}
+
+					argumentTypes.Add(type);
+				}
+			}
+
+			return extendedSqlFunction.GetReturnType(argumentTypes, _sfi, true);
 		}
 
 		/// <summary>
@@ -102,7 +145,7 @@ namespace NHibernate.Hql.Ast.ANTLR
 
 		/// <summary>
 		/// Does the given persister define a physical discriminator column
-		/// for the purpose of inheritence discrimination?
+		/// for the purpose of inheritance discrimination?
 		/// </summary>
 		/// <param name="persister">The persister to be checked.</param>
 		/// <returns>True if the persister does define an actual discriminator column.</returns>
@@ -276,7 +319,6 @@ namespace NHibernate.Hql.Ast.ANTLR
 		{
 			JoinSequence joinSequence = CreateJoinSequence();
 			joinSequence.SetRoot(collPersister, collectionName);
-			joinSequence.SetUseThetaStyle(true);		// TODO: figure out how this should be set.
 
 			///////////////////////////////////////////////////////////////////////////////
 			// This was the reason for failures regarding INDEX_OP and subclass joins on
@@ -299,7 +341,7 @@ namespace NHibernate.Hql.Ast.ANTLR
 		/// </summary>
 		/// <param name="implicitJoin">Should implicit joins (theta-style) or explicit joins (ANSI-style) be rendered</param>
 		/// <param name="associationType">The type representing the thing to be joined into.</param>
-		/// <param name="tableAlias">The table alias to use in qualifing the join conditions</param>
+		/// <param name="tableAlias">The table alias to use in qualifying the join conditions</param>
 		/// <param name="joinType">The type of join to render (inner, outer, etc)</param>
 		/// <param name="columns">The columns making up the condition of the join.</param>
 		/// <returns>The generated join sequence.</returns>
@@ -311,6 +353,8 @@ namespace NHibernate.Hql.Ast.ANTLR
 			return joinSequence;
 		}
 
+		// Since v5.4
+		[Obsolete("This method has no more usage in NHibernate and will be removed in a future version.")]
 		public String[][] GenerateColumnNames(IType[] sqlResultTypes)
 		{
 			return NameGenerator.GenerateColumnNames(sqlResultTypes, _sfi);
@@ -327,9 +371,9 @@ namespace NHibernate.Hql.Ast.ANTLR
 		}
 
 		/// <summary>
-		/// Retreive a PropertyMapping describing the given collection role.
+		/// Retrieve a PropertyMapping describing the given collection role.
 		/// </summary>
-		/// <param name="role">The collection role for whcih to retrieve the property mapping.</param>
+		/// <param name="role">The collection role for which to retrieve the property mapping.</param>
 		/// <returns>The property mapping.</returns>
 		private IPropertyMapping GetCollectionPropertyMapping(string role)
 		{

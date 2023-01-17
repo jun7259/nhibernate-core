@@ -14,10 +14,11 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 	/// Ported by: Steve Strong
 	/// </summary>
 	[CLSCompliant(false)]
-    public class ParameterNode : HqlSqlWalkerNode, IDisplayableNode, IExpectedTypeAwareNode, ISelectExpression
+	public class ParameterNode : HqlSqlWalkerNode, IDisplayableNode, IExpectedTypeAwareNode, ISelectExpressionExtension
 	{
-        private string _alias;
+		private string _alias;
 		private IParameterSpecification _parameterSpecification;
+		private int _scalarColumnIndex = -1;
 
 		public ParameterNode(IToken token) : base(token)
 		{
@@ -48,6 +49,8 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			}
 		}
 
+		internal IType GuessedType { get; set; }
+
 		public override SqlString RenderText(ISessionFactoryImplementor sessionFactory)
 		{
 			int count;
@@ -70,39 +73,61 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			}
 		}
 
-        #region ISelectExpression
+		#region ISelectExpression
 
-        public void SetScalarColumnText(int i)
-        {
-            ColumnHelper.GenerateSingleScalarColumn(ASTFactory, this, i);
-        }
+		// Since 5.4
+		[Obsolete("This method has no more usage in NHibernate and will be removed in a future version.")]
+		public void SetScalarColumnText(int i)
+		{
+			ColumnHelper.GenerateSingleScalarColumn(ASTFactory, this, i);
+		}
 
-        public FromElement FromElement
-        {
-            get { return null; }
-        }
+		public FromElement FromElement
+		{
+			get { return null; }
+		}
 
-        public bool IsConstructor
-        {
-            get { return false; }
-        }
+		public bool IsConstructor
+		{
+			get { return false; }
+		}
 
-        public bool IsReturnableEntity
-        {
-            get { return false; }
-        }
+		public bool IsReturnableEntity
+		{
+			get { return false; }
+		}
 
-        public bool IsScalar
-        {
-            get { return DataType != null && !DataType.IsAssociationType; }
-        }
+		public bool IsScalar
+		{
+			get { return DataType != null && !DataType.IsAssociationType; }
+		}
 
-        public string Alias
-        {
-            get { return _alias; }
-            set { _alias = value; }
-        }
+		public string Alias
+		{
+			get { return _alias; }
+			set { _alias = value; }
+		}
 
-        #endregion
+		// Since v5.4
+		[Obsolete("Use overload with aliasCreator parameter instead.")]
+		public void SetScalarColumn(int i)
+		{
+			_scalarColumnIndex = i;
+			SetScalarColumnText(i);
+		}
+
+		/// <inheritdoc />
+		public string[] SetScalarColumn(int i, Func<int, int, string> aliasCreator)
+		{
+			_scalarColumnIndex = i;
+			return new[] {ColumnHelper.GenerateSingleScalarColumn(ASTFactory, this, i, aliasCreator)};
+		}
+
+		public int ScalarColumnIndex
+		{
+			get { return _scalarColumnIndex; }
+		}
+
+		#endregion
 	}
 }

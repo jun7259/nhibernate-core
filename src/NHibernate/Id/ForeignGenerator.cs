@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using NHibernate.Engine;
+using NHibernate.Persister.Entity;
 using NHibernate.Type;
 
 namespace NHibernate.Id
@@ -20,7 +21,7 @@ namespace NHibernate.Id
 	/// </para>
 	/// The mapping parameter <c>property</c> is required.
 	/// </remarks>
-	public class ForeignGenerator : IIdentifierGenerator, IConfigurable
+	public partial class ForeignGenerator : IIdentifierGenerator, IConfigurable
 	{
 		private string propertyName;
 		private string entityName;
@@ -28,7 +29,7 @@ namespace NHibernate.Id
 		#region IIdentifierGenerator Members
 
 		/// <summary>
-		/// Generates an identifer from the value of a Property. 
+		/// Generates an identifier from the value of a Property. 
 		/// </summary>
 		/// <param name="sessionImplementor">The <see cref="ISessionImplementor"/> this id is being generated in.</param>
 		/// <param name="obj">The entity for which the id is being generated.</param>
@@ -39,27 +40,15 @@ namespace NHibernate.Id
 		/// </returns>
 		public object Generate(ISessionImplementor sessionImplementor, object obj)
 		{
-			ISession session = (ISession) sessionImplementor;
-
 			var persister = sessionImplementor.Factory.GetEntityPersister(entityName);
-			object associatedObject = persister.GetPropertyValue(obj, propertyName, sessionImplementor.EntityMode);
+			object associatedObject = persister.GetPropertyValue(obj, propertyName);
 
 			if (associatedObject == null)
 			{
 				throw new IdentifierGenerationException("attempted to assign id from null one-to-one property: " + propertyName);
 			}
 
-			EntityType foreignValueSourceType;
-			IType propertyType = persister.GetPropertyType(propertyName);
-			if (propertyType.IsEntityType)
-			{
-				foreignValueSourceType = (EntityType) propertyType;
-			}
-			else
-			{
-				// try identifier mapper
-				foreignValueSourceType = (EntityType) persister.GetPropertyType("_identifierMapper." + propertyName);
-			}
+			var foreignValueSourceType = GetForeignValueSourceType(persister);
 
 			object id;
 			try
@@ -71,16 +60,44 @@ namespace NHibernate.Id
 			}
 			catch (TransientObjectException)
 			{
-				id = session.Save(foreignValueSourceType.GetAssociatedEntityName(), associatedObject);
+				if (sessionImplementor is ISession session)
+				{
+					id = session.Save(foreignValueSourceType.GetAssociatedEntityName(), associatedObject);
+				}
+				else if (sessionImplementor is IStatelessSession statelessSession)
+				{
+					id = statelessSession.Insert(foreignValueSourceType.GetAssociatedEntityName(), associatedObject);
+				}
+				else
+				{
+					throw new IdentifierGenerationException("sessionImplementor is neither Session nor StatelessSession");
+				}
 			}
 
-			if (session.Contains(obj))
+			if (Contains(sessionImplementor, obj))
 			{
 				//abort the save (the object is already saved by a circular cascade)
 				return IdentifierGeneratorFactory.ShortCircuitIndicator;
 			}
 
 			return id;
+		}
+
+		private EntityType GetForeignValueSourceType(IEntityPersister persister)
+		{
+			var propertyType = persister.GetPropertyType(propertyName);
+			if (propertyType.IsEntityType)
+			{
+				return (EntityType) propertyType;
+			}
+
+			// try identifier mapper
+			return (EntityType) persister.GetPropertyType("_identifierMapper." + propertyName);
+		}
+
+		private static bool Contains(ISessionImplementor sessionImplementor, object obj)
+		{
+			return sessionImplementor is ISession session && session.Contains(obj);
 		}
 
 		#endregion

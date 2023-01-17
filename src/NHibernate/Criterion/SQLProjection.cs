@@ -1,15 +1,14 @@
 using System;
 using NHibernate.SqlCommand;
 using NHibernate.Type;
-using NHibernate.Util;
 
 namespace NHibernate.Criterion
 {
-	using System.Collections.Generic;
 	using Engine;
 
 	/// <summary>
 	/// A SQL fragment. The string {alias} will be replaced by the alias of the root entity.
+	/// Criteria aliases can also be used: "{a}.Value + {bc}.Value".
 	/// </summary>
 	[Serializable]
 	public sealed class SQLProjection : IProjection
@@ -36,17 +35,19 @@ namespace NHibernate.Criterion
 			this.groupBy = groupBy;
 		}
 
-		public SqlString ToSqlString(ICriteria criteria, int loc, ICriteriaQuery criteriaQuery, IDictionary<string, IFilter> enabledFilters)
+		public SqlString ToSqlString(ICriteria criteria, int loc, ICriteriaQuery criteriaQuery)
 		{
-			//SqlString result = new SqlString(criteriaQuery.GetSQLAlias(criteria));
-			//result.Replace(sql, "{alias}");
-			//return result;
-			return new SqlString(StringHelper.Replace(sql, "{alias}", criteriaQuery.GetSQLAlias(criteria)));
+			return GetSqlString(criteria, criteriaQuery, sql);
 		}
 
-		public SqlString ToGroupSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery, IDictionary<string, IFilter> enabledFilters)
+		public SqlString ToGroupSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery)
 		{
-			return new SqlString(StringHelper.Replace(groupBy, "{alias}", criteriaQuery.GetSQLAlias(criteria)));
+			return GetSqlString(criteria, criteriaQuery, groupBy);
+		}
+
+		private SqlString GetSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery, string sqlTemplate)
+		{
+			return criteriaQuery.RenderSQLAliases(new SqlString(sqlTemplate)).Replace("{alias}", criteriaQuery.GetSQLAlias(criteria));
 		}
 
 		public override string ToString()
@@ -82,7 +83,7 @@ namespace NHibernate.Criterion
 		/// <returns></returns>
 		public TypedValue[] GetTypedValues(ICriteria criteria, ICriteriaQuery criteriaQuery)
 		{
-			return new TypedValue[0];
+			return Array.Empty<TypedValue>();
 		}
 
 		public IType[] GetTypes(string alias, ICriteria crit, ICriteriaQuery criteriaQuery)

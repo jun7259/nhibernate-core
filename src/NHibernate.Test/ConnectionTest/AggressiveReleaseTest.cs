@@ -1,7 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Data;
+using System.Data.Common;
 using NHibernate.Cfg;
 using NHibernate.Util;
 using NUnit.Framework;
@@ -176,23 +176,24 @@ namespace NHibernate.Test.ConnectionTest
 		{
 			Prepare();
 
-			IDbConnection originalConnection = sessions.ConnectionProvider.GetConnection();
-			ISession session = sessions.OpenSession(originalConnection);
+			using (var originalConnection = Sfi.ConnectionProvider.GetConnection())
+			using (var session = Sfi.WithOptions().Connection(originalConnection).OpenSession())
+			{
+				var silly = new Silly("silly");
+				session.Save(silly);
 
-			Silly silly = new Silly("silly");
-			session.Save(silly);
+				// this will cause the connection manager to cycle through the aggressive Release logic;
+				// it should not Release the connection since we explicitly supplied it ourselves.
+				session.Flush();
 
-			// this will cause the connection manager to cycle through the aggressive Release logic;
-			// it should not Release the connection since we explicitly suplied it ourselves.
-			session.Flush();
+				Assert.IsTrue(originalConnection == session.Connection, "Different connections");
 
-			Assert.IsTrue(originalConnection == session.Connection, "Different connections");
+				session.Delete(silly);
+				session.Flush();
 
-			session.Delete(silly);
-			session.Flush();
-
-			Release(session);
-			originalConnection.Close();
+				Release(session);
+				originalConnection.Close();
+			}
 			Done();
 		}
 
@@ -203,7 +204,7 @@ namespace NHibernate.Test.ConnectionTest
 		//    Prepare();
 		//    ISession s = GetSessionUnderTest();
 
-		//    IDbConnection conn = s.Connection;
+		//    DbConnection conn = s.Connection;
 		//    Assert.IsTrue(((SessionImpl) s).ConnectionManager.HasBorrowedConnection);
 		//    conn.Close();
 		//    Assert.IsFalse(((SessionImpl) s).ConnectionManager.HasBorrowedConnection);
@@ -217,30 +218,31 @@ namespace NHibernate.Test.ConnectionTest
 		{
 			Prepare();
 			ISession s = GetSessionUnderTest();
-			s.BeginTransaction();
-
-			IList<Silly> entities = new List<Silly>();
-			for (int i = 0; i < 10; i++)
+			using (var t = s.BeginTransaction())
 			{
-				Other other = new Other("other-" + i);
-				Silly silly = new Silly("silly-" + i, other);
-				entities.Add(silly);
-				s.Save(silly);
-			}
-			s.Flush();
+				IList<Silly> entities = new List<Silly>();
+				for (int i = 0; i < 10; i++)
+				{
+					Other other = new Other("other-" + i);
+					Silly silly = new Silly("silly-" + i, other);
+					entities.Add(silly);
+					s.Save(silly);
+				}
+				s.Flush();
 
-			foreach (Silly silly in entities)
-			{
-				silly.Name = "new-" + silly.Name;
-				silly.Other.Name = "new-" + silly.Other.Name;
-			}
-//			long initialCount = sessions.Statistics.getConnectCount();
-			s.Flush();
-//			Assert.AreEqual(initialCount + 1, sessions.Statistics.getConnectCount(), "connection not maintained through Flush");
+				foreach (Silly silly in entities)
+				{
+					silly.Name = "new-" + silly.Name;
+					silly.Other.Name = "new-" + silly.Other.Name;
+				}
+				// long initialCount = sessions.Statistics.getConnectCount();
+				s.Flush();
+				//Assert.AreEqual(initialCount + 1, sessions.Statistics.getConnectCount(), "connection not maintained through Flush");
 
-			s.Delete("from Silly");
-			s.Delete("from Other");
-			s.Transaction.Commit();
+				s.Delete("from Silly");
+				s.Delete("from Other");
+				t.Commit();
+			}
 			Release(s);
 			Done();
 		}

@@ -6,7 +6,7 @@ namespace NHibernate.Transform
 	[Serializable]
 	public class AliasToEntityMapResultTransformer : AliasedTupleSubsetResultTransformer
 	{
-		private static readonly object Hasher = new object();
+		internal static readonly AliasToEntityMapResultTransformer Instance = new AliasToEntityMapResultTransformer();
 
 		public override object TransformTuple(object[] tuple, string[] aliases)
 		{
@@ -29,24 +29,23 @@ namespace NHibernate.Transform
 			return collection;
 		}
 
-
-		public override bool IsTransformedValueATupleElement(String[] aliases, int tupleLength)
+		public override bool IsTransformedValueATupleElement(string[] aliases, int tupleLength)
 		{
 			return false;
 		}
 
 		public override bool Equals(object obj)
 		{
+			if (ReferenceEquals(obj, this))
+				return true;
 			if (obj == null)
-			{
 				return false;
-			}
-			return obj.GetHashCode() == Hasher.GetHashCode();
+			return obj.GetType() == GetType();
 		}
 
 		public override int GetHashCode()
 		{
-			return Hasher.GetHashCode();
+			return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Instance);
 		}
 	}
 }

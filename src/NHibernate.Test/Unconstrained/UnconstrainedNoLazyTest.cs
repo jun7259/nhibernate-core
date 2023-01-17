@@ -1,6 +1,3 @@
-using System;
-using System.Collections;
-
 using log4net;
 using NHibernate.Criterion;
 using NUnit.Framework;
@@ -15,7 +12,7 @@ namespace NHibernate.Test.Unconstrained
 			get { return "NHibernate.Test"; }
 		}
 
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get { return new string[] {"Unconstrained.PersonNoLazy.hbm.xml"}; }
 		}
@@ -31,7 +28,7 @@ namespace NHibernate.Test.Unconstrained
 			tx.Commit();
 			session.Close();
 
-			sessions.Evict(typeof(Person));
+			Sfi.Evict(typeof(Person));
 
 			session = OpenSession();
 			tx = session.BeginTransaction();
@@ -41,7 +38,7 @@ namespace NHibernate.Test.Unconstrained
 			tx.Commit();
 			session.Close();
 
-			sessions.Evict(typeof(Person));
+			Sfi.Evict(typeof(Person));
 
 			session = OpenSession();
 			tx = session.BeginTransaction();
@@ -64,12 +61,12 @@ namespace NHibernate.Test.Unconstrained
 			tx.Commit();
 			session.Close();
 
-			sessions.Evict(typeof(Person));
+			Sfi.Evict(typeof(Person));
 
 			session = OpenSession();
 			tx = session.BeginTransaction();
 			p = (Person) session.CreateCriteria(typeof(Person))
-			             	.SetFetchMode("Employee", FetchMode.Join)
+			             	.Fetch("Employee")
 			             	.Add(Expression.Eq("Name", "gavin"))
 			             	.UniqueResult();
 			Assert.IsNull(p.Employee);
@@ -77,12 +74,12 @@ namespace NHibernate.Test.Unconstrained
 			tx.Commit();
 			session.Close();
 
-			sessions.Evict(typeof(Person));
+			Sfi.Evict(typeof(Person));
 
 			session = OpenSession();
 			tx = session.BeginTransaction();
 			p = (Person) session.CreateCriteria(typeof(Person))
-			             	.SetFetchMode("Employee", FetchMode.Join)
+			             	.Fetch("Employee")
 			             	.Add(Expression.Eq("Name", "gavin"))
 			             	.UniqueResult();
 			Assert.IsTrue(NHibernateUtil.IsInitialized(p.Employee));
@@ -135,30 +132,39 @@ namespace NHibernate.Test.Unconstrained
 		[Test]
 		public void ManyToOneUpdateFalse()
 		{
-			ISession session = OpenSession();
-			ITransaction tx = session.BeginTransaction();
-			Person p = new Person("gavin");
-			p.EmployeeId = "123456";
-			p.Unrelated = 10;
-			session.Save(p);
-			tx.Commit();
+			using (var session = OpenSession())
+			{
+				Person p = new Person("gavin");
+				using (var tx = session.BeginTransaction())
+				{
+					p.EmployeeId = "123456";
+					p.Unrelated = 10;
+					session.Save(p);
+					tx.Commit();
+				}
 
-			session.BeginTransaction();
-			p.Employee = new Employee("456123");
-			p.Unrelated = 235; // Force update of the object
-			session.Save(p.Employee);
-			session.Transaction.Commit();
-			session.Close();
+				using (var tx = session.BeginTransaction())
+				{
+					p.Employee = new Employee("456123");
+					p.Unrelated = 235; // Force update of the object
+					session.Save(p.Employee);
+					tx.Commit();
+				}
 
-			session = OpenSession();
-			session.BeginTransaction();
-			p = (Person) session.Load(typeof (Person), "gavin");
-			// Should be null, not Employee#456123
-			Assert.IsNull(p.Employee);
-			session.Delete(p);
-			session.Delete("from Employee");
-			session.Transaction.Commit();
-			session.Close();
+				session.Close();
+			}
+
+			using (var session = OpenSession())
+			using (var tx = session.BeginTransaction())
+			{
+				var p = (Person) session.Load(typeof(Person), "gavin");
+				// Should be null, not Employee#456123
+				Assert.IsNull(p.Employee);
+				session.Delete(p);
+				session.Delete("from Employee");
+				tx.Commit();
+				session.Close();
+			}
 		}
 	}
 }

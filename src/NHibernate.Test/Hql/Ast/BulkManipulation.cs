@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Threading;
-using NHibernate.Dialect;
 using NHibernate.Hql.Ast.ANTLR;
 using NHibernate.Id;
 using NHibernate.Persister.Entity;
@@ -15,6 +14,12 @@ namespace NHibernate.Test.Hql.Ast
 		public ISession OpenNewSession()
 		{
 			return OpenSession();
+		}
+
+		protected override bool AppliesTo(Dialect.Dialect dialect)
+		{
+			// Some classes are mapped with table joins, which requires temporary tables for DML to work.
+			return Dialect.SupportsTemporaryTables;
 		}
 
 		#region Non-exists
@@ -65,6 +70,28 @@ namespace NHibernate.Test.Hql.Ast
 		}
 
 		[Test]
+		public void SimpleInsertFromAggregate()
+		{
+			var data = new TestData(this);
+			data.Prepare();
+
+			ISession s = OpenSession();
+			ITransaction t = s.BeginTransaction();
+
+			s.CreateQuery("insert into Pickup (id, Vin, Owner) select id, max(Vin), max(Owner) from Car group by id").ExecuteUpdate();
+
+			t.Commit();
+			t = s.BeginTransaction();
+
+			s.CreateQuery("delete Vehicle").ExecuteUpdate();
+
+			t.Commit();
+			s.Close();
+
+			data.Cleanup();
+		}
+
+		[Test]
 		public void InsertWithManyToOne()
 		{
 			var data = new TestData(this);
@@ -76,6 +103,31 @@ namespace NHibernate.Test.Hql.Ast
 			s.CreateQuery(
 				"insert into Animal (description, bodyWeight, mother) select description, bodyWeight, mother from Human").
 				ExecuteUpdate();
+
+			t.Commit();
+			t = s.BeginTransaction();
+
+			t.Commit();
+			s.Close();
+
+			data.Cleanup();
+		}
+
+		[Test]
+		public void InsertWithManyToOneAsParameter()
+		{
+			var data = new TestData(this);
+			data.Prepare();
+
+			ISession s = OpenSession();
+			ITransaction t = s.BeginTransaction();
+
+			var mother = data.Butterfly;
+
+			s.CreateQuery(
+				"insert into Animal (description, bodyWeight, mother) select description, bodyWeight, :mother from Human")
+				.SetEntity("mother",mother)
+				.ExecuteUpdate();
 
 			t.Commit();
 			t = s.BeginTransaction();
@@ -160,10 +212,11 @@ namespace NHibernate.Test.Hql.Ast
 			data.Cleanup();
 		}
 
+		[Test]
 		public void InsertWithGeneratedId()
 		{
 			// Make sure the env supports bulk inserts with generated ids...
-			IEntityPersister persister = sessions.GetEntityPersister(typeof (PettingZoo).FullName);
+			IEntityPersister persister = Sfi.GetEntityPersister(typeof (PettingZoo).FullName);
 			IIdentifierGenerator generator = persister.IdentifierGenerator;
 			if (!HqlSqlWalker.SupportsIdGenWithBulkInsertion(generator))
 			{
@@ -206,7 +259,7 @@ namespace NHibernate.Test.Hql.Ast
 		public void InsertWithGeneratedVersionAndId()
 		{
 			// Make sure the env supports bulk inserts with generated ids...
-			IEntityPersister persister = sessions.GetEntityPersister(typeof (IntegerVersioned).FullName);
+			IEntityPersister persister = Sfi.GetEntityPersister(typeof (IntegerVersioned).FullName);
 			IIdentifierGenerator generator = persister.IdentifierGenerator;
 			if (!HqlSqlWalker.SupportsIdGenWithBulkInsertion(generator))
 			{
@@ -257,7 +310,7 @@ namespace NHibernate.Test.Hql.Ast
 		public void InsertWithGeneratedTimestampVersion()
 		{
 			// Make sure the env supports bulk inserts with generated ids...
-			IEntityPersister persister = sessions.GetEntityPersister(typeof (TimestampVersioned).FullName);
+			IEntityPersister persister = Sfi.GetEntityPersister(typeof (TimestampVersioned).FullName);
 			IIdentifierGenerator generator = persister.IdentifierGenerator;
 			if (!HqlSqlWalker.SupportsIdGenWithBulkInsertion(generator))
 			{
@@ -309,14 +362,16 @@ namespace NHibernate.Test.Hql.Ast
 		public void InsertWithSelectListUsingJoins()
 		{
 			// this is just checking parsing and syntax...
-			ISession s = OpenSession();
-			s.BeginTransaction();
-			s.CreateQuery(
-				"insert into Animal (description, bodyWeight) select h.description, h.bodyWeight from Human h where h.mother.mother is not null")
-				.ExecuteUpdate();
-			s.CreateQuery("delete from Animal").ExecuteUpdate();
-			s.Transaction.Commit();
-			s.Close();
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
+			{
+				s.CreateQuery(
+					 "insert into Animal (description, bodyWeight) select h.description, h.bodyWeight from Human h where h.mother.mother is not null")
+				 .ExecuteUpdate();
+				s.CreateQuery("delete from Animal").ExecuteUpdate();
+				t.Commit();
+				s.Close();
+			}
 		}
 
 		#endregion
@@ -513,9 +568,8 @@ namespace NHibernate.Test.Hql.Ast
 			ITransaction t = s.BeginTransaction();
 
 			s.CreateQuery("update Animal a set a.mother = null where a.id = 2").ExecuteUpdate();
-			if (! (Dialect is MySQLDialect))
+			if (Dialect.SupportsSubqueryOnMutatingTable)
 			{
-				// MySQL does not support (even un-correlated) subqueries against the update-mutating table
 				s.CreateQuery("update Animal a set a.mother = (from Animal where id = 1) where a.id = 2").ExecuteUpdate();
 			}
 
@@ -544,7 +598,7 @@ namespace NHibernate.Test.Hql.Ast
 			var e =
 				Assert.Throws<QueryException>(
 					() => s.CreateQuery("update Human set mother.name.initial = :initial").SetString("initial", "F").ExecuteUpdate());
-			Assert.That(e.Message, Is.StringStarting("Implied join paths are not assignable in update"));
+			Assert.That(e.Message, Does.StartWith("Implied join paths are not assignable in update"));
 
 			s.CreateQuery("delete Human where mother is not null").ExecuteUpdate();
 			s.CreateQuery("delete Human").ExecuteUpdate();
@@ -619,14 +673,13 @@ namespace NHibernate.Test.Hql.Ast
 
 			count =
 				s.CreateQuery("update Animal set bodyWeight = bodyWeight + :w1 + :w2")
-				.SetDouble("w1", 1)
-				.SetDouble("w2", 2)
+				.SetSingle("w1", 1)
+				.SetSingle("w2", 2)
 				.ExecuteUpdate();
 			Assert.That(count, Is.EqualTo(6), "incorrect count on 'complex' update assignment");
 
-			if (! (Dialect is MySQLDialect))
+			if (Dialect.SupportsSubqueryOnMutatingTable)
 			{
-				// MySQL does not support (even un-correlated) subqueries against the update-mutating table
 				s.CreateQuery("update Animal set bodyWeight = ( select max(bodyWeight) from Animal )").ExecuteUpdate();
 			}
 
@@ -649,7 +702,7 @@ namespace NHibernate.Test.Hql.Ast
 					s.CreateQuery("update Animal set description = :newDesc, bodyWeight = :w1 where description = :desc")
 						.SetString("desc", data.Polliwog.Description)
 						.SetString("newDesc", "Tadpole")
-						.SetDouble("w1", 3)
+						.SetSingle("w1", 3)
 						.ExecuteUpdate();
 				
 				Assert.That(count, Is.EqualTo(1));
@@ -682,9 +735,8 @@ namespace NHibernate.Test.Hql.Ast
 			count = s.CreateQuery("update Mammal set bodyWeight = 25").ExecuteUpdate();
 			Assert.That(count, Is.EqualTo(2), "incorrect update count against 'middle' of joined-subclass hierarchy");
 
-			if (! (Dialect is MySQLDialect))
+			if (Dialect.SupportsSubqueryOnMutatingTable)
 			{
-				// MySQL does not support (even un-correlated) subqueries against the update-mutating table
 				count = s.CreateQuery("update Mammal set bodyWeight = ( select max(bodyWeight) from Animal )").ExecuteUpdate();
 				Assert.That(count, Is.EqualTo(2), "incorrect update count against 'middle' of joined-subclass hierarchy");
 			}
@@ -725,7 +777,7 @@ namespace NHibernate.Test.Hql.Ast
 			using (ISession s = OpenSession())
 			{
 				var e = Assert.Throws<QueryException>(() => s.CreateQuery("update Vehicle set owner = null where owner = 'Steve'").ExecuteUpdate());
-				Assert.That(e.Message, Is.StringStarting("Left side of assigment should be a case sensitive property or a field"));
+				Assert.That(e.Message, Does.StartWith("Left side of assigment should be a case sensitive property or a field"));
 			}
 		}
 
@@ -775,6 +827,31 @@ namespace NHibernate.Test.Hql.Ast
 			data.Cleanup();
 		}
 
+		[Test]
+		public void UpdateMultitableWithWhereExistsSubquery()
+		{
+			if (!Dialect.SupportsTemporaryTables) 
+				Assert.Ignore("Cannot perform multi-table updates using dialect not supporting temp tables.");
+
+			if(!Dialect.SupportsScalarSubSelects)
+				Assert.Ignore("Dialect does not support scalar sub-select");
+
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
+			{
+				String updateQryString = "update Human h " +
+										"set h.description = 'updated' " +
+										"where exists (" +
+										"      select f.id " +
+										"      from h.friends f " +
+										"      where f.name.last = 'Public' " +
+										")";
+				s.CreateQuery(updateQryString).ExecuteUpdate();
+
+				t.Commit();
+			}
+		}
+
 		#endregion
 
 		#region DELETES
@@ -783,41 +860,23 @@ namespace NHibernate.Test.Hql.Ast
 		public void DeleteWithSubquery()
 		{
 			// setup the test data...
-			ISession s = OpenSession();
-			s.BeginTransaction();
-			var owner = new SimpleEntityWithAssociation {Name = "myEntity-1"};
-			owner.AddAssociation("assoc-1");
-			owner.AddAssociation("assoc-2");
-			owner.AddAssociation("assoc-3");
-			s.Save(owner);
-			var owner2 = new SimpleEntityWithAssociation {Name = "myEntity-2"};
-			owner2.AddAssociation("assoc-1");
-			owner2.AddAssociation("assoc-2");
-			owner2.AddAssociation("assoc-3");
-			owner2.AddAssociation("assoc-4");
-			s.Save(owner2);
-			var owner3 = new SimpleEntityWithAssociation {Name = "myEntity-3"};
-			s.Save(owner3);
-			s.Transaction.Commit();
-			s.Close();
+			CreateSimpleEntityWithAssociationData();
 
 			// now try the bulk delete
-			s = OpenSession();
-			s.BeginTransaction();
-			int count =
-				s.CreateQuery("delete SimpleEntityWithAssociation e where size(e.AssociatedEntities ) = 0 and e.Name like '%'").
-					ExecuteUpdate();
-			Assert.That(count, Is.EqualTo(1), "Incorrect delete count");
-			s.Transaction.Commit();
-			s.Close();
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
+			{
+				int count =
+					s.CreateQuery(
+						 "delete SimpleEntityWithAssociation e where size(e.AssociatedEntities ) = 0 and e.Name like '%'")
+					 .ExecuteUpdate();
+				Assert.That(count, Is.EqualTo(1), "Incorrect delete count");
+				t.Commit();
+				s.Close();
+			}
 
 			// finally, clean up
-			s = OpenSession();
-			s.BeginTransaction();
-			s.CreateQuery("delete SimpleAssociatedEntity").ExecuteUpdate();
-			s.CreateQuery("delete SimpleEntityWithAssociation").ExecuteUpdate();
-			s.Transaction.Commit();
-			s.Close();
+			CleanSimpleEntityWithAssociationData();
 		}
 
 		[Test]
@@ -1021,6 +1080,56 @@ namespace NHibernate.Test.Hql.Ast
 			s.Close();
 		}
 
+		[Test]
+		public void DeleteSubQueryReferencingTargetPropert()
+		{
+			CreateSimpleEntityWithAssociationData();
+
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
+			{
+				var count = s.CreateQuery("delete from SimpleEntityWithAssociation m where not exists (select d from SimpleAssociatedEntity d where d.Owner = m) and m.Name like 'myEntity%'").ExecuteUpdate();
+				Assert.That(count, Is.EqualTo(1), "Incorrect delete count");
+				t.Commit();
+			}
+
+			CleanSimpleEntityWithAssociationData();
+		}
+
+		private void CreateSimpleEntityWithAssociationData()
+		{
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
+			{
+				var owner = new SimpleEntityWithAssociation {Name = "myEntity-1"};
+				owner.AddAssociation("assoc-1");
+				owner.AddAssociation("assoc-2");
+				owner.AddAssociation("assoc-3");
+				s.Save(owner);
+				var owner2 = new SimpleEntityWithAssociation {Name = "myEntity-2"};
+				owner2.AddAssociation("assoc-1");
+				owner2.AddAssociation("assoc-2");
+				owner2.AddAssociation("assoc-3");
+				owner2.AddAssociation("assoc-4");
+				s.Save(owner2);
+				var owner3 = new SimpleEntityWithAssociation {Name = "myEntity-3"};
+				s.Save(owner3);
+				t.Commit();
+				s.Close();
+			}
+		}
+
+		private void CleanSimpleEntityWithAssociationData()
+		{
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
+			{
+				s.CreateQuery("delete SimpleAssociatedEntity").ExecuteUpdate();
+				s.CreateQuery("delete SimpleEntityWithAssociation").ExecuteUpdate();
+				t.Commit();
+				s.Close();
+			}
+		}
 		#endregion
 
 		private class TestData

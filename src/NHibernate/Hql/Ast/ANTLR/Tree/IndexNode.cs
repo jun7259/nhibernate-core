@@ -19,13 +19,21 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 	[CLSCompliant(false)]
 	public class IndexNode : FromReferenceNode
 	{
-		private static readonly IInternalLogger Log = LoggerProvider.LoggerFor(typeof(IndexNode));
+		private static readonly INHibernateLogger Log = NHibernateLogger.For(typeof(IndexNode));
 
 		public IndexNode(IToken token) : base(token)
 		{
 		}
 
+		// Since v5.4
+		[Obsolete("Use overload with aliasCreator parameter instead.")]
 		public override void SetScalarColumnText(int i)
+		{
+			throw new InvalidOperationException("An IndexNode cannot generate column text!");
+		}
+
+		/// <inheritdoc />
+		public override string[] SetScalarColumnText(int i, Func<int, int, string> aliasCreator)
 		{
 			throw new InvalidOperationException("An IndexNode cannot generate column text!");
 		}
@@ -70,17 +78,18 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			{
 				FromElementFactory factory = new FromElementFactory( fromClause, fromElement, path );
 				elem = factory.CreateCollectionElementsJoin( queryableCollection, elementTable );
-				if ( Log.IsDebugEnabled )
+				if ( Log.IsDebugEnabled() )
 				{
-					Log.Debug( "No FROM element found for the elements of collection join path " + path
-							+ ", created " + elem );
+					Log.Debug( "No FROM element found for the elements of collection join path {0}, created {1}",
+					           path,
+					           elem);
 				}
 			}
 			else 
 			{
-				if ( Log.IsDebugEnabled ) 
+				if ( Log.IsDebugEnabled() ) 
 				{
-					Log.Debug( "FROM element found for collection join path " + path );
+					Log.Debug("FROM element found for collection join path {0}", path);
 				}
 			}
 
@@ -170,9 +179,9 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			    FromReferenceNode collectionNode = ( FromReferenceNode ) GetChild(0);
 			    String path = collectionNode.Path + "[]." + propertyName;
 
-			    if (Log.IsDebugEnabled) 
+			    if (Log.IsDebugEnabled()) 
                 {
-				    Log.Debug( "Creating join for many-to-many elements for " + path );
+				    Log.Debug("Creating join for many-to-many elements for {0}", path);
 			    }
 
 			    FromElementFactory factory = new FromElementFactory( fromElement.FromClause, fromElement, path );

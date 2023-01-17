@@ -2,7 +2,7 @@ namespace NHibernate.Cfg.MappingSchema {
     
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -83,7 +83,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -110,7 +110,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -128,7 +128,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -193,7 +193,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -207,7 +207,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -311,7 +311,7 @@ namespace NHibernate.Cfg.MappingSchema {
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
-        public string @where;
+        public string where;
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("batch-size")]
@@ -358,21 +358,15 @@ namespace NHibernate.Cfg.MappingSchema {
         [System.Xml.Serialization.XmlAttributeAttribute()]
         public string node;
         
-        /// <remarks/>
-        [System.Xml.Serialization.XmlAttributeAttribute("embed-xml")]
-        [System.ComponentModel.DefaultValueAttribute(true)]
-        public bool embedxml;
-        
         public HbmArray() {
             this.inverse = false;
             this.mutable = true;
             this.optimisticlock = true;
-            this.embedxml = true;
         }
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -386,7 +380,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -413,7 +407,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(AnonymousType=true, Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmCacheUsage {
@@ -433,10 +427,14 @@ namespace NHibernate.Cfg.MappingSchema {
         /// <remarks/>
         [System.Xml.Serialization.XmlEnumAttribute("transactional")]
         Transactional,
+        
+        /// <remarks/>
+        [System.Xml.Serialization.XmlEnumAttribute("never")]
+        Never,
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(AnonymousType=true, Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmCacheInclude {
@@ -451,7 +449,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -465,7 +463,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -524,7 +522,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmOndelete {
@@ -539,7 +537,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -565,7 +563,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -586,7 +584,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -618,7 +616,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -636,7 +634,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -758,23 +756,17 @@ namespace NHibernate.Cfg.MappingSchema {
         [System.Xml.Serialization.XmlAttributeAttribute()]
         public string node;
         
-        /// <remarks/>
-        [System.Xml.Serialization.XmlAttributeAttribute("embed-xml")]
-        [System.ComponentModel.DefaultValueAttribute(true)]
-        public bool embedxml;
-        
         public HbmManyToOne() {
             this.unique = false;
             this.update = true;
             this.insert = true;
             this.optimisticlock = true;
             this.notfound = HbmNotFoundMode.Exception;
-            this.embedxml = true;
         }
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -788,7 +780,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmOuterJoinStrategy {
@@ -807,7 +799,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmFetchMode {
@@ -822,7 +814,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmLaziness {
@@ -841,7 +833,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmNotFoundMode {
@@ -856,7 +848,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -892,7 +884,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -996,6 +988,10 @@ namespace NHibernate.Cfg.MappingSchema {
         public bool lazy;
         
         /// <remarks/>
+        [System.Xml.Serialization.XmlAttributeAttribute("lazy-group")]
+        public string lazygroup;
+        
+        /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
         [System.ComponentModel.DefaultValueAttribute(HbmPropertyGeneration.Never)]
         public HbmPropertyGeneration generated;
@@ -1009,7 +1005,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1027,7 +1023,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1045,7 +1041,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmPropertyGeneration {
@@ -1064,7 +1060,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1125,7 +1121,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1155,7 +1151,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1183,11 +1179,6 @@ namespace NHibernate.Cfg.MappingSchema {
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
         public string node;
-        
-        /// <remarks/>
-        [System.Xml.Serialization.XmlAttributeAttribute("embed-xml")]
-        [System.ComponentModel.DefaultValueAttribute(true)]
-        public bool embedxml;
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("entity-name")]
@@ -1241,7 +1232,7 @@ namespace NHibernate.Cfg.MappingSchema {
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
-        public string @where;
+        public string where;
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("order-by")]
@@ -1252,14 +1243,13 @@ namespace NHibernate.Cfg.MappingSchema {
         public string propertyref;
         
         public HbmManyToMany() {
-            this.embedxml = true;
             this.notfound = HbmNotFoundMode.Exception;
             this.unique = false;
         }
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1281,7 +1271,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmRestrictedLaziness {
@@ -1296,7 +1286,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1318,22 +1308,16 @@ namespace NHibernate.Cfg.MappingSchema {
         public string node;
         
         /// <remarks/>
-        [System.Xml.Serialization.XmlAttributeAttribute("embed-xml")]
-        [System.ComponentModel.DefaultValueAttribute(true)]
-        public bool embedxml;
-        
-        /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("entity-name")]
         public string entityname;
         
         public HbmOneToMany() {
             this.notfound = HbmNotFoundMode.Exception;
-            this.embedxml = true;
         }
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1347,7 +1331,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1377,7 +1361,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmCustomSQLCheck {
@@ -1396,7 +1380,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmCollectionFetchMode {
@@ -1415,7 +1399,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1526,7 +1510,7 @@ namespace NHibernate.Cfg.MappingSchema {
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
-        public string @where;
+        public string where;
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("batch-size")]
@@ -1574,11 +1558,6 @@ namespace NHibernate.Cfg.MappingSchema {
         public string node;
         
         /// <remarks/>
-        [System.Xml.Serialization.XmlAttributeAttribute("embed-xml")]
-        [System.ComponentModel.DefaultValueAttribute(true)]
-        public bool embedxml;
-        
-        /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
         public bool generic;
         
@@ -1590,12 +1569,11 @@ namespace NHibernate.Cfg.MappingSchema {
             this.inverse = false;
             this.mutable = true;
             this.optimisticlock = true;
-            this.embedxml = true;
         }
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmCollectionLazy {
@@ -1614,7 +1592,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1776,7 +1754,7 @@ namespace NHibernate.Cfg.MappingSchema {
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
-        public string @where;
+        public string where;
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
@@ -1833,7 +1811,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1855,7 +1833,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(AnonymousType=true, Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmTuplizerEntitymode {
@@ -1865,16 +1843,12 @@ namespace NHibernate.Cfg.MappingSchema {
         Poco,
         
         /// <remarks/>
-        [System.Xml.Serialization.XmlEnumAttribute("xml")]
-        Xml,
-        
-        /// <remarks/>
         [System.Xml.Serialization.XmlEnumAttribute("dynamic-map")]
         DynamicMap,
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1924,7 +1898,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -1983,7 +1957,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2028,7 +2002,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmUnsavedValueType {
@@ -2047,7 +2021,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2103,7 +2077,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2121,7 +2095,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2175,7 +2149,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2202,7 +2176,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2270,6 +2244,10 @@ namespace NHibernate.Cfg.MappingSchema {
         public bool lazy;
         
         /// <remarks/>
+        [System.Xml.Serialization.XmlAttributeAttribute("lazy-group")]
+        public string lazygroup;
+        
+        /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("optimistic-lock")]
         [System.ComponentModel.DefaultValueAttribute(true)]
         public bool optimisticlock;
@@ -2288,7 +2266,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2352,7 +2330,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2468,7 +2446,7 @@ namespace NHibernate.Cfg.MappingSchema {
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
-        public string @where;
+        public string where;
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("batch-size")]
@@ -2516,11 +2494,6 @@ namespace NHibernate.Cfg.MappingSchema {
         public string node;
         
         /// <remarks/>
-        [System.Xml.Serialization.XmlAttributeAttribute("embed-xml")]
-        [System.ComponentModel.DefaultValueAttribute(true)]
-        public bool embedxml;
-        
-        /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
         public bool generic;
         
@@ -2532,12 +2505,11 @@ namespace NHibernate.Cfg.MappingSchema {
             this.inverse = false;
             this.mutable = true;
             this.optimisticlock = true;
-            this.embedxml = true;
         }
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2658,7 +2630,7 @@ namespace NHibernate.Cfg.MappingSchema {
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
-        public string @where;
+        public string where;
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("batch-size")]
@@ -2706,11 +2678,6 @@ namespace NHibernate.Cfg.MappingSchema {
         public string node;
         
         /// <remarks/>
-        [System.Xml.Serialization.XmlAttributeAttribute("embed-xml")]
-        [System.ComponentModel.DefaultValueAttribute(true)]
-        public bool embedxml;
-        
-        /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
         public bool generic;
         
@@ -2726,12 +2693,11 @@ namespace NHibernate.Cfg.MappingSchema {
             this.inverse = false;
             this.mutable = true;
             this.optimisticlock = true;
-            this.embedxml = true;
         }
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2750,7 +2716,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2769,7 +2735,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2795,7 +2761,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2825,7 +2791,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2860,7 +2826,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2895,7 +2861,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -2976,19 +2942,13 @@ namespace NHibernate.Cfg.MappingSchema {
         [System.Xml.Serialization.XmlAttributeAttribute()]
         public string node;
         
-        /// <remarks/>
-        [System.Xml.Serialization.XmlAttributeAttribute("embed-xml")]
-        [System.ComponentModel.DefaultValueAttribute(true)]
-        public bool embedxml;
-        
         public HbmOneToOne() {
             this.constrained = false;
-            this.embedxml = true;
         }
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -3074,7 +3034,7 @@ namespace NHibernate.Cfg.MappingSchema {
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
-        public string @where;
+        public string where;
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("batch-size", DataType="positiveInteger")]
@@ -3117,20 +3077,14 @@ namespace NHibernate.Cfg.MappingSchema {
         [System.Xml.Serialization.XmlAttributeAttribute()]
         public string node;
         
-        /// <remarks/>
-        [System.Xml.Serialization.XmlAttributeAttribute("embed-xml")]
-        [System.ComponentModel.DefaultValueAttribute(true)]
-        public bool embedxml;
-        
         public HbmPrimitiveArray() {
             this.mutable = true;
             this.optimisticlock = true;
-            this.embedxml = true;
         }
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(AnonymousType=true, Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmPrimitivearrayOuterjoin {
@@ -3149,7 +3103,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(AnonymousType=true, Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmPrimitivearrayFetch {
@@ -3168,7 +3122,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -3279,7 +3233,7 @@ namespace NHibernate.Cfg.MappingSchema {
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
-        public string @where;
+        public string where;
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("batch-size")]
@@ -3327,11 +3281,6 @@ namespace NHibernate.Cfg.MappingSchema {
         public string node;
         
         /// <remarks/>
-        [System.Xml.Serialization.XmlAttributeAttribute("embed-xml")]
-        [System.ComponentModel.DefaultValueAttribute(true)]
-        public bool embedxml;
-        
-        /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
         public bool generic;
         
@@ -3347,12 +3296,11 @@ namespace NHibernate.Cfg.MappingSchema {
             this.inverse = false;
             this.mutable = true;
             this.optimisticlock = true;
-            this.embedxml = true;
         }
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -3466,7 +3414,7 @@ namespace NHibernate.Cfg.MappingSchema {
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
-        public string @where;
+        public string where;
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("batch-size")]
@@ -3514,11 +3462,6 @@ namespace NHibernate.Cfg.MappingSchema {
         public string node;
         
         /// <remarks/>
-        [System.Xml.Serialization.XmlAttributeAttribute("embed-xml")]
-        [System.ComponentModel.DefaultValueAttribute(true)]
-        public bool embedxml;
-        
-        /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
         public bool generic;
         
@@ -3530,12 +3473,11 @@ namespace NHibernate.Cfg.MappingSchema {
             this.inverse = false;
             this.mutable = true;
             this.optimisticlock = true;
-            this.embedxml = true;
         }
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -3568,7 +3510,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -3621,7 +3563,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(AnonymousType=true, Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmTimestampUnsavedvalue {
@@ -3636,7 +3578,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(AnonymousType=true, Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmTimestampSource {
@@ -3651,7 +3593,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmVersionGeneration {
@@ -3666,7 +3608,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -3727,7 +3669,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -3779,7 +3721,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -3862,7 +3804,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(AnonymousType=true, Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmJoinFetch {
@@ -3877,7 +3819,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -3950,6 +3892,10 @@ namespace NHibernate.Cfg.MappingSchema {
         [System.Xml.Serialization.XmlElementAttribute("query", typeof(HbmQuery))]
         [System.Xml.Serialization.XmlElementAttribute("sql-query", typeof(HbmSqlQuery))]
         public object[] Items1;
+        
+        /// <remarks/>
+        [System.Xml.Serialization.XmlElementAttribute("filter")]
+        public HbmFilter[] filter;
         
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("entity-name")]
@@ -4033,11 +3979,7 @@ namespace NHibernate.Cfg.MappingSchema {
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
         public string node;
-
-        /// <remarks/>
-        [System.Xml.Serialization.XmlElementAttribute("filter")]
-        public HbmFilter[] filter;
-
+        
         public HbmJoinedSubclass() {
             this.dynamicupdate = false;
             this.dynamicinsert = false;
@@ -4046,7 +3988,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4067,7 +4009,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4098,7 +4040,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4120,7 +4062,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4134,7 +4076,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmLockMode {
@@ -4161,7 +4103,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4200,7 +4142,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4214,7 +4156,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4245,7 +4187,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4263,7 +4205,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4338,7 +4280,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4356,7 +4298,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmFlushMode {
@@ -4366,16 +4308,20 @@ namespace NHibernate.Cfg.MappingSchema {
         Auto,
         
         /// <remarks/>
-        [System.Xml.Serialization.XmlEnumAttribute("never")]
-        Never,
+        [System.Xml.Serialization.XmlEnumAttribute("manual")]
+        Manual,
         
         /// <remarks/>
         [System.Xml.Serialization.XmlEnumAttribute("always")]
         Always,
+        
+        /// <remarks/>
+        [System.Xml.Serialization.XmlEnumAttribute("never")]
+        Never,
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmCacheMode {
@@ -4402,7 +4348,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4492,7 +4438,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4562,6 +4508,10 @@ namespace NHibernate.Cfg.MappingSchema {
         public object[] Items1;
         
         /// <remarks/>
+        [System.Xml.Serialization.XmlElementAttribute("filter")]
+        public HbmFilter[] filter;
+        
+        /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute("entity-name")]
         public string entityname;
         
@@ -4623,10 +4573,6 @@ namespace NHibernate.Cfg.MappingSchema {
         /// <remarks/>
         [System.Xml.Serialization.XmlAttributeAttribute()]
         public string node;
-
-        /// <remarks/>
-        [System.Xml.Serialization.XmlElementAttribute("filter")]
-        public HbmFilter[] filter;
         
         public HbmSubclass() {
             this.dynamicupdate = false;
@@ -4636,7 +4582,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4794,7 +4740,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmPolymorphismType {
@@ -4809,7 +4755,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Xml.Serialization.XmlTypeAttribute(Namespace="urn:nhibernate-mapping-2.2")]
     public enum HbmOptimisticLockMode {
@@ -4832,7 +4778,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4846,7 +4792,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4866,7 +4812,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4884,7 +4830,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4898,7 +4844,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4916,7 +4862,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4951,7 +4897,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -4969,7 +4915,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -5058,7 +5004,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]
@@ -5080,7 +5026,7 @@ namespace NHibernate.Cfg.MappingSchema {
     }
     
     /// <remarks/>
-    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "3.2.0.1001")]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute("HbmXsd", "5.4.0-dev")]
     [System.SerializableAttribute()]
     [System.Diagnostics.DebuggerStepThroughAttribute()]
     [System.ComponentModel.DesignerCategoryAttribute("code")]

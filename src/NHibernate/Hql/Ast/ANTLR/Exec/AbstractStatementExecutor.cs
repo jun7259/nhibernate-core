@@ -1,3 +1,5 @@
+using System;
+using System.Data.Common;
 using Antlr.Runtime;
 using Antlr.Runtime.Tree;
 using NHibernate.Action;
@@ -14,21 +16,18 @@ using NHibernate.SqlTypes;
 using NHibernate.Transaction;
 using NHibernate.Type;
 using NHibernate.Util;
-using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Data;
-using System.Linq;
-using IQueryable = NHibernate.Persister.Entity.IQueryable;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace NHibernate.Hql.Ast.ANTLR.Exec
 {
 	[CLSCompliant(false)]
-	public abstract class AbstractStatementExecutor : IStatementExecutor
+	public abstract partial class AbstractStatementExecutor : IStatementExecutor
 	{
-		private readonly IInternalLogger log;
+		private readonly INHibernateLogger log;
 
-		protected AbstractStatementExecutor(IStatement statement, IInternalLogger log)
+		protected AbstractStatementExecutor(IStatement statement, INHibernateLogger log)
 		{
 			Statement = statement;
 			Walker = statement.Walker;
@@ -46,97 +45,40 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 
 		protected ISessionFactoryImplementor Factory
 		{
-			get{return Walker.SessionFactoryHelper.Factory;}
+			get { return Walker.SessionFactoryHelper.Factory; }
 		}
 
 		protected virtual void CoordinateSharedCacheCleanup(ISessionImplementor session)
 		{
 			var action = new BulkOperationCleanupAction(session, AffectedQueryables);
 
-			action.Init();
-
 			if (session.IsEventSource)
 			{
-				((IEventSource)session).ActionQueue.AddAction(action);
+				((IEventSource) session).ActionQueue.AddAction(action);
+			}
+			else
+			{
+				action.ExecuteAfterTransactionCompletion(true);
 			}
 		}
 
-       protected SqlString ExpandDynamicFilterParameters(SqlString sqlString, ICollection<IParameterSpecification> parameterSpecs, ISessionImplementor session)
-       {
-           var enabledFilters = session.EnabledFilters;
-           if (enabledFilters.Count == 0 || sqlString.ToString().IndexOf(ParserHelper.HqlVariablePrefix) < 0)
-           {
-               return sqlString;
-           }
+		// Since v5.2
+		[Obsolete("This method has no more actual async calls to do, use its sync version instead.")]
+		protected virtual Task CoordinateSharedCacheCleanupAsync(ISessionImplementor session, CancellationToken cancellationToken)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
 
-           Dialect.Dialect dialect = session.Factory.Dialect;
-           string symbols = ParserHelper.HqlSeparators + dialect.OpenQuote + dialect.CloseQuote;
+			try
+			{
+				CoordinateSharedCacheCleanup(session);
+				return Task.CompletedTask;
+			}
+			catch (Exception ex)
+			{
+				return Task.FromException<object>(ex);
+			}
+		}
 
-           var result = new SqlStringBuilder();
-           foreach (var sqlPart in sqlString)
-           {
-               var parameter = sqlPart as Parameter;
-               if (parameter != null)
-               {
-                   result.Add(parameter);
-                   continue;
-               }
-
-               var sqlFragment = sqlPart.ToString();
-               var tokens = new StringTokenizer(sqlFragment, symbols, true);
-
-               foreach (string token in tokens)
-               {
-                   if (token.StartsWith(ParserHelper.HqlVariablePrefix))
-                   {
-                       string filterParameterName = token.Substring(1);
-                       string[] parts = StringHelper.ParseFilterParameterName(filterParameterName);
-                       string filterName = parts[0];
-                       string parameterName = parts[1];
-                       var filter = (FilterImpl)enabledFilters[filterName];
-
-                       object value = filter.GetParameter(parameterName);
-                       IType type = filter.FilterDefinition.GetParameterType(parameterName);
-                       int parameterColumnSpan = type.GetColumnSpan(session.Factory);
-                       var collectionValue = value as ICollection;
-                       int? collectionSpan = null;
-
-                       // Add query chunk
-                       string typeBindFragment = string.Join(", ", Enumerable.Repeat("?", parameterColumnSpan).ToArray());
-                       string bindFragment;
-                       if (collectionValue != null && !type.ReturnedClass.IsArray)
-                       {
-                           collectionSpan = collectionValue.Count;
-                           bindFragment = string.Join(", ", Enumerable.Repeat(typeBindFragment, collectionValue.Count).ToArray());
-                       }
-                       else
-                       {
-                           bindFragment = typeBindFragment;
-                       }
-
-                       // dynamic-filter parameter tracking
-                       var filterParameterFragment = SqlString.Parse(bindFragment);
-                       var dynamicFilterParameterSpecification = new DynamicFilterParameterSpecification(filterName, parameterName, type, collectionSpan);
-                       var parameters = filterParameterFragment.GetParameters().ToArray();
-                       var sqlParameterPos = 0;
-                       var paramTrackers = dynamicFilterParameterSpecification.GetIdsForBackTrack(session.Factory);
-                       foreach (var paramTracker in paramTrackers)
-                       {
-                           parameters[sqlParameterPos++].BackTrack = paramTracker;
-                       }
-
-                       parameterSpecs.Add(dynamicFilterParameterSpecification);
-                       result.Add(filterParameterFragment);
-                   }
-                   else
-                   {
-                       result.Add(token);
-                   }
-               }
-           }
-           return result.ToSqlString();
-       }
- 
 		protected SqlString GenerateIdInsertSelect(IQueryable persister, string tableAlias, IASTNode whereClause)
 		{
 			var select = new SqlSelectBuilder(Factory);
@@ -168,7 +110,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 				}
 				if (whereJoinFragment.Length > 0)
 				{
-					whereJoinFragment.Append(" and ");
+					whereJoinFragment = whereJoinFragment.Append(" and ");
 				}
 			}
 
@@ -204,7 +146,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 
 		protected string GenerateIdSubselect(IQueryable persister)
 		{
-			return "select " + StringHelper.Join(", ", persister.IdentifierColumnNames) + " from " + persister.TemporaryIdTableName;
+			return "select " + string.Join(", ", persister.IdentifierColumnNames) + " from " + persister.TemporaryIdTableName;
 		}
 
 		protected virtual void CreateTemporaryTableIfNecessary(IQueryable persister, ISessionImplementor session)
@@ -249,19 +191,10 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 			{
 				IIsolatedWork work = new TmpIdTableDropIsolatedWork(persister, log, session);
 
-				if (ShouldIsolateTemporaryTableDDL())
+				if (ShouldIsolateTemporaryTableDDL() && session.ConnectionManager.CurrentTransaction != null)
 				{
-					session.ConnectionManager.Transaction.RegisterSynchronization(new AfterTransactionCompletes((success) =>
-					{
-						if (Factory.Settings.IsDataDefinitionInTransactionSupported)
-						{
-							Isolater.DoIsolatedWork(work, session);
-						}
-						else
-						{
-							Isolater.DoNonTransactedWork(work, session);
-						}
-					}));
+					session.ConnectionManager.CurrentTransaction.RegisterSynchronization(
+						new IsolatedWorkAfterTransaction(work, session));
 				}
 				else
 				{
@@ -275,16 +208,16 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 			else
 			{
 				// at the very least cleanup the data :)
-				IDbCommand ps = null;
+				DbCommand ps = null;
 				try
 				{
 					var commandText = new SqlString("delete from " + persister.TemporaryIdTableName);
-					ps = session.Batcher.PrepareCommand(CommandType.Text, commandText, new SqlType[0]);
+					ps = session.Batcher.PrepareCommand(CommandType.Text, commandText, Array.Empty<SqlType>());
 					session.Batcher.ExecuteNonQuery(ps);
 				}
 				catch (Exception t)
 				{
-					log.Warn("unable to cleanup temporary id table after use [" + t + "]");
+					log.Warn(t, "unable to cleanup temporary id table after use [{0}]", t);
 				}
 				finally
 				{
@@ -303,22 +236,22 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 			}
 		}
 
-		private class TmpIdTableCreationIsolatedWork : IIsolatedWork
+		private partial class TmpIdTableCreationIsolatedWork : IIsolatedWork
 		{
 			private readonly IQueryable persister;
-			private readonly IInternalLogger log;
+			private readonly INHibernateLogger log;
 			private readonly ISessionImplementor session;
 
-			public TmpIdTableCreationIsolatedWork(IQueryable persister, IInternalLogger log, ISessionImplementor session)
+			public TmpIdTableCreationIsolatedWork(IQueryable persister, INHibernateLogger log, ISessionImplementor session)
 			{
 				this.persister = persister;
 				this.log = log;
 				this.session = session;
 			}
 
-			public void DoWork(IDbConnection connection, IDbTransaction transaction)
+			public void DoWork(DbConnection connection, DbTransaction transaction)
 			{
-				IDbCommand stmnt = null;
+				DbCommand stmnt = null;
 				try
 				{
 					stmnt = connection.CreateCommand();
@@ -329,7 +262,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 				}
 				catch (Exception t)
 				{
-					log.Debug("unable to create temporary id table [" + t.Message + "]");
+					log.Debug(t, "unable to create temporary id table [{0}]", t.Message);
 				}
 				finally
 				{
@@ -348,9 +281,9 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 			}
 		}
 
-		private class TmpIdTableDropIsolatedWork : IIsolatedWork
+		private partial class TmpIdTableDropIsolatedWork : IIsolatedWork
 		{
-			public TmpIdTableDropIsolatedWork(IQueryable persister, IInternalLogger log, ISessionImplementor session)
+			public TmpIdTableDropIsolatedWork(IQueryable persister, INHibernateLogger log, ISessionImplementor session)
 			{
 				this.persister = persister;
 				this.log = log;
@@ -358,12 +291,12 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 			}
 
 			private readonly IQueryable persister;
-			private readonly IInternalLogger log;
+			private readonly INHibernateLogger log;
 			private readonly ISessionImplementor session;
 
-			public void DoWork(IDbConnection connection, IDbTransaction transaction)
+			public void DoWork(DbConnection connection, DbTransaction transaction)
 			{
-				IDbCommand stmnt = null;
+				DbCommand stmnt = null;
 				try
 				{
 					stmnt = connection.CreateCommand();
@@ -374,7 +307,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Exec
 				}
 				catch (Exception t)
 				{
-					log.Warn("unable to drop temporary id table after use [" + t.Message + "]");
+					log.Warn("unable to drop temporary id table after use [{0}]", t.Message);
 				}
 				finally
 				{

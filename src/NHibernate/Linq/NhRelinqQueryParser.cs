@@ -1,16 +1,19 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using NHibernate.Engine;
 using NHibernate.Linq.ExpressionTransformers;
+using NHibernate.Linq.Visitors;
+using NHibernate.Param;
+using NHibernate.Util;
 using Remotion.Linq;
-using Remotion.Linq.Clauses;
-using Remotion.Linq.Clauses.StreamedData;
 using Remotion.Linq.EagerFetching.Parsing;
-using Remotion.Linq.Parsing.ExpressionTreeVisitors.Transformation;
+using Remotion.Linq.Parsing.ExpressionVisitors.Transformation;
 using Remotion.Linq.Parsing.Structure;
-using Remotion.Linq.Parsing.Structure.IntermediateModel;
+using Remotion.Linq.Parsing.Structure.ExpressionTreeProcessors;
 using Remotion.Linq.Parsing.Structure.NodeTypeProviders;
 
 namespace NHibernate.Linq
@@ -22,13 +25,14 @@ namespace NHibernate.Linq
 		static NhRelinqQueryParser()
 		{
 			var transformerRegistry = ExpressionTransformerRegistry.CreateDefault();
-			transformerRegistry.Register(new RemoveCharToIntConversion());
 			transformerRegistry.Register(new RemoveRedundantCast());
 			transformerRegistry.Register(new SimplifyCompareTransformer());
 
-			var processor = ExpressionTreeParser.CreateDefaultProcessor(transformerRegistry);
-			// Add custom processors here:
-			// processor.InnerProcessors.Add (new MyExpressionTreeProcessor());
+			// If needing a compound processor for adding other processing, do not use
+			// ExpressionTreeParser.CreateDefaultProcessor(transformerRegistry), it would
+			// cause NH-3961 again by including a PartialEvaluatingExpressionTreeProcessor.
+			// Directly instantiate a CompoundExpressionTreeProcessor instead.
+			var processor = new TransformingExpressionTreeProcessor(transformerRegistry);
 
 			var nodeTypeProvider = new NHibernateNodeTypeProvider();
 
@@ -36,9 +40,56 @@ namespace NHibernate.Linq
 			QueryParser = new QueryParser(expressionTreeParser);
 		}
 
+		// Obsolete since v5.3
+		/// <summary>
+		/// Applies the minimal transformations required before parametrization,
+		/// expression key computing and parsing.
+		/// </summary>
+		/// <param name="expression">The expression to transform.</param>
+		/// <returns>The transformed expression.</returns>
+		[Obsolete("Use overload with PreTransformationParameters parameter")]
+		public static Expression PreTransform(Expression expression)
+		{
+			// In order to keep the old behavior use a DML query mode to skip detecting variables,
+			// which will then generate parameters for each constant expression
+			return PreTransform(expression, new PreTransformationParameters(QueryMode.Delete, null)).Expression;
+		}
+
+		/// <summary>
+		/// Applies the minimal transformations required before parametrization,
+		/// expression key computing and parsing.
+		/// </summary>
+		/// <param name="expression">The expression to transform.</param>
+		/// <param name="parameters">The parameters used in the transformation process.</param>
+		/// <returns><see cref="PreTransformationResult"/> that contains the transformed expression.</returns>
+		public static PreTransformationResult PreTransform(Expression expression, PreTransformationParameters parameters)
+		{
+			parameters.EvaluatableExpressionFilter = new NhEvaluatableExpressionFilter(parameters.SessionFactory);
+			parameters.QueryVariables = new Dictionary<ConstantExpression, QueryVariable>();
+
+			var partiallyEvaluatedExpression = NhPartialEvaluatingExpressionVisitor
+				.EvaluateIndependentSubtrees(expression, parameters);
+
+			return new PreTransformationResult(
+				parameters.PreTransformer.Invoke(partiallyEvaluatedExpression),
+				parameters.SessionFactory,
+				parameters.QueryVariables);
+		}
+
 		public static QueryModel Parse(Expression expression)
 		{
 			return QueryParser.GetParsedQuery(expression);
+		}
+
+		internal static Func<Expression, Expression> CreatePreTransformer(IExpressionTransformerRegistrar expressionTransformerRegistrar)
+		{
+			var preTransformerRegistry = new ExpressionTransformerRegistry();
+			// NH-3247: must remove .Net compiler char to int conversion before
+			// parameterization occurs.
+			preTransformerRegistry.Register(new RemoveCharToIntConversion());
+			expressionTransformerRegistrar?.Register(preTransformerRegistry);
+
+			return new TransformingExpressionTreeProcessor(preTransformerRegistry).Process;
 		}
 	}
 
@@ -50,33 +101,28 @@ namespace NHibernate.Linq
 		{
 			var methodInfoRegistry = new MethodInfoBasedNodeTypeRegistry();
 
-			methodInfoRegistry.Register(new[] { typeof(EagerFetchingExtensionMethods).GetMethod("Fetch") }, typeof(FetchOneExpressionNode));
-			methodInfoRegistry.Register(new[] { typeof(EagerFetchingExtensionMethods).GetMethod("FetchMany") }, typeof(FetchManyExpressionNode));
-			methodInfoRegistry.Register(new[] { typeof(EagerFetchingExtensionMethods).GetMethod("ThenFetch") }, typeof(ThenFetchOneExpressionNode));
-			methodInfoRegistry.Register(new[] { typeof(EagerFetchingExtensionMethods).GetMethod("ThenFetchMany") }, typeof(ThenFetchManyExpressionNode));
-
+			methodInfoRegistry.Register(
+				new[] { ReflectHelper.FastGetMethodDefinition(EagerFetchingExtensionMethods.Fetch, default(IQueryable<object>), default(Expression<Func<object, object>>)) },
+				typeof(FetchOneExpressionNode));
+			methodInfoRegistry.Register(
+				new[] { ReflectHelper.FastGetMethodDefinition(EagerFetchingExtensionMethods.FetchLazyProperties, default(IQueryable<object>)) },
+				typeof(FetchLazyPropertiesExpressionNode));
+			methodInfoRegistry.Register(
+				new[] { ReflectHelper.FastGetMethodDefinition(EagerFetchingExtensionMethods.FetchMany, default(IQueryable<object>), default(Expression<Func<object, IEnumerable<object>>>)) },
+				typeof(FetchManyExpressionNode));
+			methodInfoRegistry.Register(
+				new[] { ReflectHelper.FastGetMethodDefinition(EagerFetchingExtensionMethods.ThenFetch, default(INhFetchRequest<object, object>), default(Expression<Func<object, object>>)) },
+				typeof(ThenFetchOneExpressionNode));
+			methodInfoRegistry.Register(
+				new[] { ReflectHelper.FastGetMethodDefinition( EagerFetchingExtensionMethods.ThenFetchMany, default(INhFetchRequest<object, object>), default(Expression<Func<object, IEnumerable<object>>>)) },
+				typeof(ThenFetchManyExpressionNode));
 			methodInfoRegistry.Register(
 				new[]
-					{
-						typeof(LinqExtensionMethods).GetMethod("Cacheable"),
-						typeof(LinqExtensionMethods).GetMethod("CacheMode"),
-						typeof(LinqExtensionMethods).GetMethod("CacheRegion"),
-					}, typeof(CacheableExpressionNode));
-
-			methodInfoRegistry.Register(
-				new[]
-					{
-						ReflectionHelper.GetMethodDefinition(() => Queryable.AsQueryable(null)),
-						ReflectionHelper.GetMethodDefinition(() => Queryable.AsQueryable<object>(null)),
-					}, typeof(AsQueryableExpressionNode)
-				);
-
-			methodInfoRegistry.Register(
-				new[]
-					{
-						ReflectionHelper.GetMethodDefinition(() => LinqExtensionMethods.Timeout<object>(null, 0)),
-					}, typeof (TimeoutExpressionNode)
-				);
+				{
+					ReflectHelper.FastGetMethodDefinition(LinqExtensionMethods.WithLock, default(IQueryable<object>), default(LockMode)),
+					ReflectHelper.FastGetMethodDefinition(LinqExtensionMethods.WithLock, default(IEnumerable<object>), default(LockMode))
+				}, 
+				typeof(LockExpressionNode));
 
 			var nodeTypeProvider = ExpressionTreeParser.CreateDefaultNodeTypeProvider();
 			nodeTypeProvider.InnerProviders.Add(methodInfoRegistry);
@@ -95,131 +141,6 @@ namespace NHibernate.Linq
 		public System.Type GetNodeType(MethodInfo method)
 		{
 			return defaultNodeTypeProvider.GetNodeType(method);
-		}
-	}
-
-	public class AsQueryableExpressionNode : MethodCallExpressionNodeBase
-	{
-		public AsQueryableExpressionNode(MethodCallExpressionParseInfo parseInfo) : base(parseInfo)
-		{
-		}
-
-		public override Expression Resolve(ParameterExpression inputParameter, Expression expressionToBeResolved, ClauseGenerationContext clauseGenerationContext)
-		{
-			return Source.Resolve(inputParameter, expressionToBeResolved, clauseGenerationContext);
-		}
-
-		protected override QueryModel ApplyNodeSpecificSemantics(QueryModel queryModel, ClauseGenerationContext clauseGenerationContext)
-		{
-			return queryModel;
-		}
-	}
-
-	public class CacheableExpressionNode : ResultOperatorExpressionNodeBase
-	{
-		private readonly MethodCallExpressionParseInfo _parseInfo;
-		private readonly ConstantExpression _data;
-
-		public CacheableExpressionNode(MethodCallExpressionParseInfo parseInfo, ConstantExpression data) : base(parseInfo, null, null)
-		{
-			_parseInfo = parseInfo;
-			_data = data;
-		}
-
-		public override Expression Resolve(ParameterExpression inputParameter, Expression expressionToBeResolved, ClauseGenerationContext clauseGenerationContext)
-		{
-			throw new NotImplementedException();
-		}
-
-		protected override ResultOperatorBase CreateResultOperator(ClauseGenerationContext clauseGenerationContext)
-		{
-			return new CacheableResultOperator(_parseInfo, _data);
-		}
-	}
-
-	public class CacheableResultOperator : ResultOperatorBase
-	{
-		public MethodCallExpressionParseInfo ParseInfo { get; private set; }
-		public ConstantExpression Data { get; private set; }
-
-		public CacheableResultOperator(MethodCallExpressionParseInfo parseInfo, ConstantExpression data)
-		{
-			ParseInfo = parseInfo;
-			Data = data;
-		}
-
-		public override IStreamedData ExecuteInMemory(IStreamedData input)
-		{
-			throw new NotImplementedException();
-		}
-
-		public override IStreamedDataInfo GetOutputDataInfo(IStreamedDataInfo inputInfo)
-		{
-			return inputInfo;
-		}
-
-		public override ResultOperatorBase Clone(CloneContext cloneContext)
-		{
-			throw new NotImplementedException();
-		}
-
-		public override void TransformExpressions(Func<Expression, Expression> transformation)
-		{
-		}
-	}
-
-
-	internal class TimeoutExpressionNode : ResultOperatorExpressionNodeBase
-	{
-		private readonly MethodCallExpressionParseInfo _parseInfo;
-		private readonly ConstantExpression _timeout;
-
-		public TimeoutExpressionNode(MethodCallExpressionParseInfo parseInfo, ConstantExpression timeout)
-			: base(parseInfo, null, null)
-		{
-			_parseInfo = parseInfo;
-			_timeout = timeout;
-		}
-
-		public override Expression Resolve(ParameterExpression inputParameter, Expression expressionToBeResolved, ClauseGenerationContext clauseGenerationContext)
-		{
-			return Source.Resolve(inputParameter, expressionToBeResolved, clauseGenerationContext);
-		}
-
-		protected override ResultOperatorBase CreateResultOperator(ClauseGenerationContext clauseGenerationContext)
-		{
-			return new TimeoutResultOperator(_parseInfo, _timeout);
-		}
-	}
-
-	internal class TimeoutResultOperator : ResultOperatorBase
-	{
-		public MethodCallExpressionParseInfo ParseInfo { get; private set; }
-		public ConstantExpression Timeout { get; private set; }
-
-		public TimeoutResultOperator(MethodCallExpressionParseInfo parseInfo, ConstantExpression timeout)
-		{
-			ParseInfo = parseInfo;
-			Timeout = timeout;
-		}
-
-		public override IStreamedData ExecuteInMemory(IStreamedData input)
-		{
-			throw new NotImplementedException();
-		}
-
-		public override IStreamedDataInfo GetOutputDataInfo(IStreamedDataInfo inputInfo)
-		{
-			return inputInfo;
-		}
-
-		public override ResultOperatorBase Clone(CloneContext cloneContext)
-		{
-			throw new NotImplementedException();
-		}
-
-		public override void TransformExpressions(Func<Expression, Expression> transformation)
-		{
 		}
 	}
 }

@@ -1,4 +1,6 @@
 using System.Data;
+using System.Data.Common;
+using NHibernate.AdoNet;
 
 namespace NHibernate.Driver
 {
@@ -23,7 +25,7 @@ namespace NHibernate.Driver
 	/// <a href="http://pgfoundry.org/projects/npgsql">http://pgfoundry.org/projects/npgsql</a>. 
 	/// </p>
 	/// </remarks>
-	public class NpgsqlDriver : ReflectionBasedDriver
+	public class NpgsqlDriver : ReflectionBasedDriver, IEmbeddedBatcherFactoryProvider
 	{
 		/// <summary>
 		/// Initializes a new instance of the <see cref="NpgsqlDriver"/> class.
@@ -39,49 +41,57 @@ namespace NHibernate.Driver
 		{
 		}
 
-		public override bool UseNamedPrefixInSql
-		{
-			get { return true; }
-		}
+		public override bool UseNamedPrefixInSql => true;
 
-		public override bool UseNamedPrefixInParameter
-		{
-			get { return true; }
-		}
+		public override bool UseNamedPrefixInParameter => true;
 
-		public override string NamedPrefix
-		{
-			get { return ":"; }
-		}
+		public override string NamedPrefix => ":";
 
-		public override bool SupportsMultipleOpenReaders
-		{
-			get { return false; }
-		}
+		public override bool SupportsMultipleOpenReaders => false;
 
-		protected override bool SupportsPreparingCommands
-		{
-			// NH-2267 Patrick Earl
-			get { return true; }
-		}
+		/// <remarks>
+		/// NH-2267 Patrick Earl
+		/// </remarks>
+		protected override bool SupportsPreparingCommands => true;
+
+		public override bool SupportsNullEnlistment => false;
 
 		public override IResultSetsCommand GetResultSetsCommand(Engine.ISessionImplementor session)
 		{
 			return new BasicResultSetsCommand(session);
 		}
 
-		public override bool SupportsMultipleQueries
-		{
-			get { return true; }
-		}
+		public override bool SupportsMultipleQueries => true;
 
-		protected override void InitializeParameter(IDbDataParameter dbParam, string name, SqlTypes.SqlType sqlType)
+		protected override void InitializeParameter(DbParameter dbParam, string name, SqlTypes.SqlType sqlType)
 		{
-			base.InitializeParameter(dbParam, name, sqlType);
+			if (sqlType == null)
+				throw new QueryException($"No type assigned to parameter '{name}'");
 
-			// Since the .NET currency type has 4 decimal places, we use a decimal type in PostgreSQL instead of its native 2 decimal currency type.
+			dbParam.ParameterName = FormatNameForParameter(name);
 			if (sqlType.DbType == DbType.Currency)
+			{
+				// Since the .NET currency type has 4 decimal places, we use a decimal type in PostgreSQL instead of its native 2 decimal currency type.
 				dbParam.DbType = DbType.Decimal;
+			}
+			else if (DriverVersionMajor < 6 || sqlType.DbType != DbType.DateTime)
+			{
+				dbParam.DbType = sqlType.DbType;
+			}
+			else
+			{
+				// Let Npgsql 6 driver to decide parameter type 
+			}
 		}
+
+		// Prior to v3, Npgsql was expecting DateTime for time.
+		// https://github.com/npgsql/npgsql/issues/347
+		public override bool RequiresTimeSpanForTime => DriverVersionMajor >= 3;
+
+		public override bool HasDelayedDistributedTransactionCompletion => true;
+
+		System.Type IEmbeddedBatcherFactoryProvider.BatcherFactoryClass => typeof(GenericBatchingBatcherFactory);
+
+		private int DriverVersionMajor => DriverVersion?.Major ?? 3;
 	}
 }

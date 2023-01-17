@@ -3,6 +3,7 @@ using NUnit.Framework;
 
 namespace NHibernate.Test.MappingByCode.MixAutomapping
 {
+	[TestFixture]
 	public class EntityTests
 	{
 		private class AComponent
@@ -15,12 +16,14 @@ namespace NHibernate.Test.MappingByCode.MixAutomapping
 		}
 		private class Entity
 		{
+			// Used by reflection
+#pragma warning disable CS0169 // The field is never used
 			private int id;
+#pragma warning restore CS0169 // The field is never used
 		}
 
 		private enum Something
 		{
-
 		}
 
 		[Test]

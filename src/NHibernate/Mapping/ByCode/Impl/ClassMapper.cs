@@ -4,10 +4,11 @@ using System.Linq;
 using System.Reflection;
 using NHibernate.Cfg.MappingSchema;
 using NHibernate.Persister.Entity;
+using NHibernate.Util;
 
 namespace NHibernate.Mapping.ByCode.Impl
 {
-	public class ClassMapper : AbstractPropertyContainerMapper, IClassMapper
+	public class ClassMapper : AbstractPropertyContainerMapper, IClassMapper, IEntitySqlsWithCheckMapper
 	{
 		private readonly HbmClass classMapping;
 		private readonly IIdMapper idMapper;
@@ -24,7 +25,6 @@ namespace NHibernate.Mapping.ByCode.Impl
 			: base(rootClass, mapDoc)
 		{
 			classMapping = new HbmClass();
-			var toAdd = new[] {classMapping};
 			classMapping.name = rootClass.GetShortClassName(mapDoc);
 			if (rootClass.IsAbstract)
 			{
@@ -36,7 +36,7 @@ namespace NHibernate.Mapping.ByCode.Impl
 			classMapping.Item = hbmId;
 			idMapper = new IdMapper(idProperty, hbmId);
 
-			mapDoc.Items = mapDoc.Items == null ? toAdd : mapDoc.Items.Concat(toAdd).ToArray();
+			mapDoc.Items = ArrayHelper.Append(mapDoc.Items, classMapping);
 		}
 
 		#region Overrides of AbstractPropertyContainerMapper
@@ -47,8 +47,7 @@ namespace NHibernate.Mapping.ByCode.Impl
 			{
 				throw new ArgumentNullException("property");
 			}
-			var toAdd = new[] {property};
-			classMapping.Items = classMapping.Items == null ? toAdd : classMapping.Items.Concat(toAdd).ToArray();
+			classMapping.Items = ArrayHelper.Append(classMapping.Items, property);
 		}
 
 		#endregion
@@ -59,6 +58,12 @@ namespace NHibernate.Mapping.ByCode.Impl
 		}
 
 		#region Implementation of IClassMapper
+		public void Abstract(bool isAbstract)
+		{
+			classMapping.@abstract = isAbstract;
+			classMapping.abstractSpecified = true;
+		}
+
 		public void OptimisticLock(OptimisticLockMode mode)
 		{
 			classMapping.optimisticlock = (HbmOptimisticLockMode)Enum.Parse(typeof(OptimisticLockMode), mode.ToString());
@@ -252,9 +257,8 @@ namespace NHibernate.Mapping.ByCode.Impl
 			{
 				var hbmJoin = new HbmJoin();
 				splitGroup = new JoinMapper(Container, splitGroupId, hbmJoin, MapDoc);
-				var toAdd = new[] { hbmJoin };
 				JoinMappers.Add(splitGroupId, splitGroup);
-				classMapping.Items1 = classMapping.Items1 == null ? toAdd : classMapping.Items1.Concat(toAdd).ToArray();
+				classMapping.Items1 = ArrayHelper.Append(classMapping.Items1, hbmJoin);
 			}
 
 			splitMapping(splitGroup);
@@ -325,13 +329,22 @@ namespace NHibernate.Mapping.ByCode.Impl
 		public void Synchronize(params string[] table)
 		{
 			if (table == null)
-			{
 				return;
+
+			var existingSyncs = classMapping.synchronize != null
+				? new HashSet<string>(classMapping.synchronize.Select(x => x.table))
+				: new HashSet<string>();
+
+			foreach (var t in table)
+			{
+				var cleanedName = t?.Trim();
+				if (!string.IsNullOrEmpty(cleanedName))
+				{
+					existingSyncs.Add(cleanedName);
+				}
 			}
-			var existingSyncs = new HashSet<string>(classMapping.synchronize != null ? classMapping.synchronize.Select(x => x.table) : Enumerable.Empty<string>());
-			System.Array.ForEach(table.Where(x => x != null).Select(tableName => tableName.Trim()).Where(cleanedName => !"".Equals(cleanedName)).ToArray(),
-			                     x => existingSyncs.Add(x.Trim()));
-			classMapping.synchronize = existingSyncs.Select(x => new HbmSynchronize {table = x}).ToArray();
+
+			classMapping.synchronize = existingSyncs.ToArray(x => new HbmSynchronize { table = x });
 		}
 
 		#endregion
@@ -356,6 +369,17 @@ namespace NHibernate.Mapping.ByCode.Impl
 			classMapping.sqlinsert.Text = new[] {sql};
 		}
 
+		public void SqlInsert(string sql, SqlCheck sqlCheck)
+		{
+			if (classMapping.SqlInsert == null)
+			{
+				classMapping.sqlinsert = new HbmCustomSQL();
+			}
+			classMapping.sqlinsert.Text = new[] { sql };
+			classMapping.sqlinsert.checkSpecified = true;
+			classMapping.sqlinsert.check = sqlCheck.ToHbmSqlCheck();
+		}
+
 		public void SqlUpdate(string sql)
 		{
 			if (classMapping.SqlUpdate == null)
@@ -365,6 +389,17 @@ namespace NHibernate.Mapping.ByCode.Impl
 			classMapping.sqlupdate.Text = new[] {sql};
 		}
 
+		public void SqlUpdate(string sql, SqlCheck sqlCheck)
+		{
+			if (classMapping.SqlUpdate == null)
+			{
+				classMapping.sqlupdate = new HbmCustomSQL();
+			}
+			classMapping.sqlupdate.Text = new[] { sql };
+			classMapping.sqlupdate.checkSpecified = true;
+			classMapping.sqlupdate.check = sqlCheck.ToHbmSqlCheck();
+		}
+
 		public void SqlDelete(string sql)
 		{
 			if (classMapping.SqlDelete == null)
@@ -372,6 +407,17 @@ namespace NHibernate.Mapping.ByCode.Impl
 				classMapping.sqldelete = new HbmCustomSQL();
 			}
 			classMapping.sqldelete.Text = new[] {sql};
+		}
+
+		public void SqlDelete(string sql, SqlCheck sqlCheck)
+		{
+			if (classMapping.SqlDelete == null)
+			{
+				classMapping.sqldelete = new HbmCustomSQL();
+			}
+			classMapping.sqldelete.Text = new[] { sql };
+			classMapping.sqldelete.checkSpecified = true;
+			classMapping.sqldelete.check = sqlCheck.ToHbmSqlCheck();
 		}
 
 		public void Subselect(string sql)

@@ -1,5 +1,6 @@
 using System;
 using System.Data;
+using System.Data.Common;
 using System.Text;
 
 namespace NHibernate.SqlTypes
@@ -12,7 +13,7 @@ namespace NHibernate.SqlTypes
 	/// <remarks>
 	/// <p>
 	/// The <see cref="Driver.IDriver"/> uses the SqlType to get enough
-	/// information to create an <see cref="IDbDataParameter"/>.  
+	/// information to create an <see cref="DbParameter"/>.  
 	/// </p>
 	/// <p>
 	/// The <see cref="Dialect.Dialect"/> use the SqlType to convert the <see cref="DbType"/>
@@ -20,7 +21,7 @@ namespace NHibernate.SqlTypes
 	/// </p>
 	/// </remarks>
 	[Serializable]
-	public class SqlType
+	public class SqlType : IEquatable<SqlType>
 	{
 		private readonly DbType dbType;
 		private readonly int length;
@@ -47,6 +48,13 @@ namespace NHibernate.SqlTypes
 			this.precision = precision;
 			this.scale = scale;
 			precisionDefined = true;
+		}
+
+		public SqlType(DbType dbType, byte scale)
+		{
+			this.dbType = dbType;
+			this.scale = scale;
+			ScaleDefined = true;
 		}
 
 		public DbType DbType
@@ -79,6 +87,8 @@ namespace NHibernate.SqlTypes
 			get { return precisionDefined; }
 		}
 
+		public bool ScaleDefined { get; }
+
 		#region System.Object Members
 
 		public override int GetHashCode()
@@ -94,6 +104,10 @@ namespace NHibernate.SqlTypes
 				else if (PrecisionDefined)
 				{
 					hashCode = (DbType.GetHashCode() / 3) + (Precision.GetHashCode() / 3) + (Scale.GetHashCode() / 3);
+				}
+				else if (ScaleDefined)
+				{
+					hashCode = DbType.GetHashCode() / 3 + Scale.GetHashCode() / 3;
 				}
 				else
 				{
@@ -111,25 +125,39 @@ namespace NHibernate.SqlTypes
 
 		public bool Equals(SqlType rhsSqlType)
 		{
-			if (rhsSqlType == null)
-			{
-				return false;
-			}
+			if (ReferenceEquals(this, rhsSqlType))
+				return true;
 
-			if (LengthDefined)
-			{
-				return (DbType.Equals(rhsSqlType.DbType)) && (Length == rhsSqlType.Length);
-			}
-			if (PrecisionDefined)
-			{
-				return (DbType.Equals(rhsSqlType.DbType)) && (Precision == rhsSqlType.Precision) && (Scale == rhsSqlType.Scale);
-			}
-			return (DbType.Equals(rhsSqlType.DbType));
+			if (rhsSqlType == null)
+				return false;
+
+			if (DbType != rhsSqlType.DbType)
+				return false;
+
+			if (LengthDefined != rhsSqlType.LengthDefined)
+				return false;
+
+			if (PrecisionDefined != rhsSqlType.PrecisionDefined)
+				return false;
+
+			if (ScaleDefined != rhsSqlType.ScaleDefined)
+				return false;
+
+			if (Length != rhsSqlType.Length)
+				return false;
+
+			if (Precision != rhsSqlType.Precision)
+				return false;
+
+			if (Scale != rhsSqlType.Scale)
+				return false;
+
+			return true;
 		}
 
 		public override string ToString()
 		{
-			if (!LengthDefined && !PrecisionDefined)
+			if (!LengthDefined && !PrecisionDefined && !ScaleDefined)
 			{
 				// Shortcut
 				return DbType.ToString();
@@ -145,6 +173,10 @@ namespace NHibernate.SqlTypes
 			if (PrecisionDefined)
 			{
 				result.Append("(Precision=").Append(Precision).Append(", ").Append("Scale=").Append(Scale).Append(')');
+			}
+			else if (ScaleDefined)
+			{
+				result.Append("Scale=").Append(Scale).Append(')');
 			}
 
 			return result.ToString();

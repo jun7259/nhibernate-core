@@ -1,5 +1,5 @@
 using System;
-using System.Data;
+using System.Data.Common;
 using NUnit.Framework;
 
 namespace NHibernate.Test.NHSpecificTest.NH1483
@@ -7,13 +7,15 @@ namespace NHibernate.Test.NHSpecificTest.NH1483
 	[TestFixture]
 	public class Fixture : BugTestCase
 	{
+		protected override string CacheConcurrencyStrategy => "nonstrict-read-write";
+
 		protected override void OnTearDown()
 		{
 			DeleteAll(true);
 		}
 
 		/// <summary>
-		/// Tests that a Subclass can be loaded from second level cache as the specifed 
+		/// Tests that a Subclass can be loaded from second level cache as the specified 
 		/// type of baseclass
 		/// </summary>
 		/// <typeparam name="TBaseClass">The type of the BaseClass to test.</typeparam>
@@ -81,7 +83,7 @@ namespace NHibernate.Test.NHSpecificTest.NH1483
 				else
 				{
 					//delete directly from the db
-					using (IDbCommand cmd = session.Connection.CreateCommand())
+					using (var cmd = session.Connection.CreateCommand())
 					{
 						cmd.CommandText = "DELETE FROM BaseClass";
 						cmd.ExecuteNonQuery();

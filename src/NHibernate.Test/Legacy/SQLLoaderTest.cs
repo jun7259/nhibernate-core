@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Dynamic;
 using NHibernate.Dialect;
 using NHibernate.DomainModel;
 using NUnit.Framework;
@@ -14,7 +15,7 @@ namespace NHibernate.Test.Legacy
 	[TestFixture]
 	public class SQLLoaderTest : TestCase
 	{
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get
 			{
@@ -48,7 +49,7 @@ namespace NHibernate.Test.Legacy
 			session.Save(sim, 1L);
 			IQuery q = session.CreateSQLQuery("select {sim.*} from Simple {sim} where {sim}.date_ = ?")
 				.AddEntity("sim", typeof(Simple));
-			q.SetTimestamp(0, sim.Date);
+			q.SetDateTime(0, sim.Date);
 			Assert.AreEqual(1, q.List().Count, "q.List.Count");
 			session.Delete(sim);
 			txn.Commit();
@@ -72,7 +73,7 @@ namespace NHibernate.Test.Legacy
 			IQuery q =
 				session.CreateSQLQuery("select {sim.*} from Simple {sim} where {sim}.date_ = :fred")
 				.AddEntity("sim", typeof(Simple));
-			q.SetTimestamp("fred", sim.Date);
+			q.SetDateTime("fred", sim.Date);
 			Assert.AreEqual(1, q.List().Count, "q.List.Count");
 			session.Delete(sim);
 			txn.Commit();
@@ -138,6 +139,64 @@ namespace NHibernate.Test.Legacy
 			session.Delete("from Category");
 			session.Flush();
 			session.Close();
+		}
+
+		[Test]
+		public void FindBySQLDictionary()
+		{
+			using (var session = OpenSession())
+			using (var tran = session.BeginTransaction())
+			{
+				var s = new Category { Name = nextLong.ToString() };
+				nextLong++;
+				session.Save(s);
+
+				s = new Category { Name = "WannaBeFound" };
+				session.Flush();
+
+				var query =
+					session.CreateSQLQuery("select {category.*} from Category {category} where {category}.Name = :Name")
+					       .AddEntity("category", typeof(Category));
+				var parameters = new Dictionary<string, object>
+				{
+					{ nameof(s.Name), s.Name }
+				};
+				query.SetProperties(parameters);
+				var results = query.List();
+				Assert.That(results, Is.Empty);
+
+				session.Delete("from Category");
+				tran.Commit();
+			}
+		}
+
+		[Test]
+		public void FindBySQLDynamic()
+		{
+			using (var session = OpenSession())
+			using (var tran = session.BeginTransaction())
+			{
+				var s = new Category { Name = nextLong.ToString() };
+				nextLong++;
+				session.Save(s);
+
+				s = new Category { Name = "WannaBeFound" };
+				session.Flush();
+
+				var query =
+					session.CreateSQLQuery("select {category.*} from Category {category} where {category}.Name = :Name")
+					       .AddEntity("category", typeof(Category));
+				dynamic parameters = new ExpandoObject();
+				parameters.Name = s.Name;
+				// dynamic does not work on inherited interface method calls. https://stackoverflow.com/q/3071634
+				IQuery q = query;
+				q.SetProperties(parameters);
+				var results = query.List();
+				Assert.That(results, Is.Empty);
+
+				session.Delete("from Category");
+				tran.Commit();
+			}
 		}
 
 		[Test]
@@ -333,8 +392,8 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void DoubleAliasing()
 		{
-			if (Dialect is MySQLDialect) return;
-			if (Dialect is FirebirdDialect) return; // See comment below
+			if (!Dialect.SupportsScalarSubSelects)
+				Assert.Ignore("Dialect does not support scalar sub-select, used by Map formula in B (C1 and C2) mapping");
 
 			ISession session = OpenSession();
 
@@ -364,7 +423,6 @@ namespace NHibernate.Test.Legacy
 			Assert.IsNotNull(list);
 
 			Assert.AreEqual(2, list.Count);
-			// On Firebird the list has 4 elements, I don't understand why.
 
 			session.Delete("from A");
 			session.Flush();
@@ -409,7 +467,6 @@ namespace NHibernate.Test.Legacy
 			list = query.List();
 
 			Assert.IsTrue(list.Count == 1);
-
 
 			session.Clear();
 
@@ -582,7 +639,8 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void FindBySQLDiscriminatedDiffSessions()
 		{
-			if (Dialect is MySQLDialect) return;
+			if (!Dialect.SupportsScalarSubSelects)
+				Assert.Ignore("Dialect does not support scalar sub-select, used by Map formula in B (C1 and C2) mapping");
 
 			ISession session = OpenSession();
 			A savedA = new A();

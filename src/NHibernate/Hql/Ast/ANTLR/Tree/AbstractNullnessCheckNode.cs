@@ -75,20 +75,26 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			{
 				if ( i == 1 )
 				{
-					container.AddChildren(
-						ASTFactory.CreateNode(comparisonType, comparisonText,
-							ASTFactory.CreateNode(HqlSqlWalker.SQL_TOKEN, mutationTexts[0])),
-						ASTFactory.CreateNode(comparisonType, comparisonText,
-							ASTFactory.CreateNode(HqlSqlWalker.SQL_TOKEN, mutationTexts[1])));
+					var op1 = ASTFactory.CreateNode(comparisonType, comparisonText);
+					var operand1 = ASTFactory.CreateNode(HqlSqlWalker.SQL_TOKEN, mutationTexts[0]);
+					op1.SetFirstChild(operand1);
+					container.SetFirstChild(op1);
+
+					var op2 = ASTFactory.CreateNode(comparisonType, comparisonText);
+					var operand2 = ASTFactory.CreateNode(HqlSqlWalker.SQL_TOKEN, mutationTexts[1]);
+					op2.SetFirstChild(operand2);
+					op1.AddSibling(op2);
 				}
 				else 
 				{
-					container.AddChildren(
-						ASTFactory.CreateNode(expansionConnectorType, expansionConnectorText),
-						ASTFactory.CreateNode(comparisonType, comparisonText,
-							ASTFactory.CreateNode(HqlSqlWalker.SQL_TOKEN, mutationTexts[i])));
+					var operand = ASTFactory.CreateNode(HqlSqlWalker.SQL_TOKEN, mutationTexts[i]);
+					var op = ASTFactory.CreateNode(comparisonType, comparisonText);
+					op.SetFirstChild(operand);
 
-					container = GetChild(0);
+					var newContainer = ASTFactory.CreateNode(expansionConnectorType, expansionConnectorText);
+					container.SetFirstChild(newContainer);
+					newContainer.AddSibling(op);
+					container = newContainer;
 				}
 			}
 		}
@@ -138,11 +144,11 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			else if ( operand is SqlNode ) 
 			{
 				string nodeText = operand.Text;
-				if ( nodeText.StartsWith( "(" ) ) 
+				if ( nodeText.StartsWith( '(' ) ) 
 				{
 					nodeText = nodeText.Substring( 1 );
 				}
-				if ( nodeText.EndsWith( ")" ) ) 
+				if ( nodeText.EndsWith( ')' ) ) 
 				{
 					nodeText = nodeText.Substring( 0, nodeText.Length - 1 );
 				}

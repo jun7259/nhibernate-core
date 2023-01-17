@@ -1,5 +1,7 @@
 using System;
 using System.Collections;
+using System.Linq;
+using NHibernate.Dialect;
 using NUnit.Framework;
 
 namespace NHibernate.Test.CompositeId
@@ -12,7 +14,7 @@ namespace NHibernate.Test.CompositeId
 			get { return "NHibernate.Test"; }
 		}
 
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get
 			{
@@ -24,9 +26,10 @@ namespace NHibernate.Test.CompositeId
 			}
 		}
 
-		protected override string CacheConcurrencyStrategy
+		protected override bool AppliesTo(Dialect.Dialect dialect)
 		{
-			get { return null; }
+			// Order uses a scalar sub-select formula.
+			return Dialect.SupportsScalarSubSelects;
 		}
 
 		[Test]
@@ -120,7 +123,6 @@ namespace NHibernate.Test.CompositeId
 				t.Commit();
 			}
 
-			
 			using (s = OpenSession())
 			{
 				t = s.BeginTransaction();
@@ -278,6 +280,16 @@ namespace NHibernate.Test.CompositeId
 			s.CreateQuery("from LineItem ol where ol.Order.Id.CustomerId = 'C111'").List();
 			t.Commit();
 			s.Close();
+		}
+
+		[Test(Description = "GH-2646")]
+		public void AnyOnCompositeId()
+		{
+			using (var s = OpenSession())
+			{
+				s.Query<Order>().Where(o => o.LineItems.Any()).ToList();
+				s.Query<Order>().Select(o => o.LineItems.Any()).ToList();
+			}
 		}
 	}
 }

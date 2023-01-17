@@ -1,9 +1,12 @@
+using System;
 using System.Collections.Generic;
 using NHibernate.Proxy.DynamicProxy;
 using NUnit.Framework;
 
 namespace NHibernate.Test.DynamicProxyTests.ProxiedMembers
 {
+	[TestFixture]
+	[Obsolete]
 	public class MetodWithRefDictionaryTest
 	{
 		public class MyClass

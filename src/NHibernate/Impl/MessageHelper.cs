@@ -12,13 +12,8 @@ namespace NHibernate.Impl
 	/// <summary>
 	/// Helper methods for rendering log messages and exception messages
 	/// </summary>
-	public sealed class MessageHelper
+	public static class MessageHelper
 	{
-		private MessageHelper()
-		{
-			// should not be created	
-		}
-
 		/// <summary>
 		/// Generate small message that can be used in traces and exception messages.
 		/// </summary>
@@ -286,7 +281,6 @@ namespace NHibernate.Impl
 		/// <returns>An info string, in the form [Foo.bars#1]</returns>
 		internal static String CollectionInfoString(ICollectionPersister persister, IPersistentCollection collection, object collectionKey, ISessionImplementor session)
 		{
-
 			StringBuilder s = new StringBuilder();
 			s.Append("[");
 			if (persister == null)
@@ -302,7 +296,7 @@ namespace NHibernate.Impl
 				object ownerKey;
 				// TODO: Is it redundant to attempt to use the collectionKey,
 				// or is always using the owner id sufficient?
-				if (collectionKey.GetType().IsAssignableFrom(ownerIdentifierType.ReturnedClass))
+				if (ownerIdentifierType.ReturnedClass.IsInstanceOfType(collectionKey))
 				{
 					ownerKey = collectionKey;
 				}
@@ -374,7 +368,7 @@ namespace NHibernate.Impl
 			// the given ID.  Due to property-ref keys, the collection key
 			// may not be the owner key.
 			IType ownerIdentifierType = persister.OwnerEntityPersister.IdentifierType;
-			if (id.GetType().IsAssignableFrom(ownerIdentifierType.ReturnedClass))
+			if (ownerIdentifierType.ReturnedClass.IsInstanceOfType(id))
 			{
 				s.Append(ownerIdentifierType.ToLoggableString(id, factory));
 			}

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using NHibernate.Dialect;
 using NHibernate.DomainModel.Northwind.Entities;
+using NHibernate.Driver;
 using NHibernate.Linq;
 using NUnit.Framework;
 
@@ -62,7 +63,7 @@ namespace NHibernate.Test.Linq.ByMethod
 								  select g.Key).ToList();
 
 				Assert.That(orders.Count, Is.EqualTo(481));
-				Assert.That(Regex.Replace(spy.GetWholeLog(), @"\s+", " "), Is.StringContaining("group by order0_.OrderDate"));
+				Assert.That(Regex.Replace(spy.GetWholeLog(), @"\s+", " "), Does.Contain("group by order0_.OrderDate"));
 			}
 		}
 
@@ -87,6 +88,9 @@ namespace NHibernate.Test.Linq.ByMethod
 		[Test]
 		public void SingleKeyGroupAndOrderByKeyAggregateProjection()
 		{
+			if (!TestDialect.SupportsOrderByAggregate)
+				Assert.Ignore("Dialect does not support ordering by an aggregation");
+
 			//NH-2452
 			var result = db.Products
 				.GroupBy(i => i.UnitPrice)
@@ -105,6 +109,9 @@ namespace NHibernate.Test.Linq.ByMethod
 		[Test]
 		public void SingleKeyPropertyGroupAndOrderByProjectedCount()
 		{
+			if (!TestDialect.SupportsOrderByAggregate)
+				Assert.Ignore("Dialect does not support ordering by an aggregation");
+
 			// NH-2560
 
 			var orderCounts = db.Orders
@@ -121,10 +128,12 @@ namespace NHibernate.Test.Linq.ByMethod
 			AssertOrderedBy.Descending(orderCounts, oc => oc.OrderCount);
 		}
 
-
 		[Test]
 		public void SingleKeyPropertyGroupAndOrderByCountBeforeProjection()
 		{
+			if (!TestDialect.SupportsOrderByAggregate)
+				Assert.Ignore("Dialect does not support ordering by an aggregation");
+
 			// NH-3026, variation of NH-2560.
 			// This is a variation of SingleKeyPropertyGroupAndOrderByProjectedCount()
 			// that puts the ordering expression inside the OrderBy, without first
@@ -215,6 +224,8 @@ namespace NHibernate.Test.Linq.ByMethod
 		[Test]
 		public void SingleKeyGroupAndOrderByNonKeyAggregateProjection()
 		{
+			if (!TestDialect.SupportsOrderByAggregate)
+				Assert.Ignore("Dialect does not support ordering by an aggregation");
 			//NH-2452
 			var result = db.Products
 				.GroupBy(p => p.UnitPrice)
@@ -285,19 +296,19 @@ namespace NHibernate.Test.Linq.ByMethod
 						group o by o.OrderDate
 						into g
 						select new
-								   {
-									   g.Key,
-									   Count = g.SelectMany(x => x.OrderLines).Count()
-								   }).ToList();
+									{
+										g.Key,
+										Count = g.SelectMany(x => x.OrderLines).Count()
+									}).ToList();
 
 			var query = (from o in db.Orders
 						group o by o.OrderDate
 						into g
 						select new
-								   {
-									   g.Key,
-									   Count = g.SelectMany(x => x.OrderLines).Count()
-								   }).ToList();
+									{
+										g.Key,
+										Count = g.SelectMany(x => x.OrderLines).Count()
+									}).ToList();
 
 			Assert.That(query.Count, Is.EqualTo(481));
 			Assert.That(query, Is.EquivalentTo(list));
@@ -333,9 +344,9 @@ namespace NHibernate.Test.Linq.ByMethod
 		{
 			//NH-2566
 			var results = (from o in db.Orders
-			               group o by o.Customer
-			               into g
-			               select g.Key.CustomerId)
+								group o by o.Customer
+								into g
+								select g.Key.CustomerId)
 				.OrderBy(customerId => customerId)
 				.Skip(10)
 				.Take(10)
@@ -358,6 +369,40 @@ namespace NHibernate.Test.Linq.ByMethod
 			//NH-2566
 			var namesAreNotEmpty = !db.Users.GroupBy(p => p.Name).Select(g => g.Key).Any(name => name.Length == 0);
 			Assert.That(namesAreNotEmpty, Is.True);
+		}
+
+		[Test]
+		public void GroupByWithStringEnumParameter()
+		{
+			db.Users
+			  .GroupBy(p => p.Enum1)
+			  .Select(g => g.Key == EnumStoredAsString.Large ? g.Sum(o => o.Id) : 0)
+			  .ToList();
+			db.Users
+			  .GroupBy(p => new StringEnumGroup {Enum = p.Enum1})
+			  .Select(g => g.Key.Enum == EnumStoredAsString.Large ? g.Sum(o => o.Id) : 0)
+			  .ToList();
+			db.Users
+			  .GroupBy(p => new[] {p.Enum1})
+			  .Select(g => g.Key[0] == EnumStoredAsString.Large ? g.Sum(o => o.Id) : 0)
+			  .ToList();
+			db.Users
+			  .GroupBy(p => new {p.Enum1})
+			  .Select(g => g.Key.Enum1 == EnumStoredAsString.Large ? g.Sum(o => o.Id) : 0)
+			  .ToList();
+			db.Users
+			  .GroupBy(p => new {Test = new {Test2 = p.Enum1}})
+			  .Select(g => g.Key.Test.Test2 == EnumStoredAsString.Large ? g.Sum(o => o.Id) : 0)
+			  .ToList();
+			db.Users
+			  .GroupBy(p => new {Test = new[] {p.Enum1}})
+			  .Select(g => g.Key.Test[0] == EnumStoredAsString.Large ? g.Sum(o => o.Id) : 0)
+			  .ToList();
+		}
+
+		private class StringEnumGroup
+		{
+			public EnumStoredAsString Enum { get; set; }
 		}
 
 		[Test]
@@ -416,6 +461,406 @@ namespace NHibernate.Test.Linq.ByMethod
 
 			Assert.That(result.Key, Is.EqualTo(263.5M));
 			Assert.That(result.Count, Is.EqualTo(1));
+		}
+
+		[Test]
+		public void ProjectingCountWithPredicate()
+		{
+			var result = db.Products
+				.GroupBy(x => x.Supplier.CompanyName)
+				.Select(x => new { x.Key, Count = x.Count(y => y.UnitPrice == 9.50M) })
+				.OrderByDescending(x => x.Key)
+				.First();
+
+			Assert.That(result.Key, Is.EqualTo("Zaanse Snoepfabriek"));
+			Assert.That(result.Count, Is.EqualTo(1));
+		}
+
+		[Test]
+		public void FilteredByCountWithPredicate()
+		{
+			var result = db.Products
+				.GroupBy(x => x.Supplier.CompanyName)
+				.Where(x => x.Count(y => y.UnitPrice == 12.75M) == 1)
+				.Select(x => new { x.Key, Count = x.Count() })
+				.First();
+
+			Assert.That(result.Key, Is.EqualTo("Zaanse Snoepfabriek"));
+			Assert.That(result.Count, Is.EqualTo(2));
+		}
+
+		[Test]
+		public void FilteredByCountFromSubQuery()
+		{
+			if (!Dialect.SupportsScalarSubSelects)
+				Assert.Ignore("Dialect does not support scalar sub-selects");
+
+			//Not really an aggregate filter, but included to ensure that this kind of query still works
+			var result = db.Products
+				.GroupBy(x => x.Supplier.CompanyName)
+				.Where(x => db.Products.Count(y => y.Supplier.CompanyName==x.Key && y.UnitPrice == 12.75M) == 1)
+				.Select(x => new { x.Key, Count = x.Count() })
+				.First();
+
+			Assert.That(result.Key, Is.EqualTo("Zaanse Snoepfabriek"));
+			Assert.That(result.Count, Is.EqualTo(2));
+		}
+
+		[Test]
+		public void FilteredByAndProjectingSumWithPredicate()
+		{
+			var result = db.Products
+				.GroupBy(x => x.Supplier.CompanyName)
+				.Where(x => x.Sum(y => y.UnitPrice == 12.75M ? y.UnitPrice : 0M) == 12.75M)
+				.Select(x => new { x.Key, Sum = x.Sum(y => y.UnitPrice) })
+				.First();
+
+			Assert.That(result.Key, Is.EqualTo("Zaanse Snoepfabriek"));
+			Assert.That(result.Sum, Is.EqualTo(12.75M + 9.50M));
+		}
+
+		[Test]
+		public void FilteredByKeyAndProjectedWithAggregatePredicates()
+		{
+			var result = db.Products
+				.GroupBy(x => x.Supplier.CompanyName)
+				.Where(x => x.Key == "Zaanse Snoepfabriek")
+				.Select(x => new { x.Key, 
+					Sum = x.Sum(y => y.UnitPrice == 12.75M ? y.UnitPrice : 0M),
+					Avg = x.Average(y => y.UnitPrice == 12.75M ? y.UnitPrice : 0M),
+					Count = x.Count(y => y.UnitPrice == 12.75M),
+					Max = x.Max(y => y.UnitPrice == 12.75M ? y.UnitPrice : 0M),
+					Min = x.Min(y => y.UnitPrice == 12.75M ? y.UnitPrice : 0M)
+				})
+				.First();
+
+			Assert.That(result.Key, Is.EqualTo("Zaanse Snoepfabriek"));
+			Assert.That(result.Sum, Is.EqualTo(12.75M));
+			Assert.That(result.Count, Is.EqualTo(1));
+			Assert.That(result.Avg, Is.EqualTo(12.75M/2));
+			Assert.That(result.Max, Is.EqualTo(12.75M));
+			Assert.That(result.Min, Is.EqualTo(0M));
+		}
+
+		[Test]
+		public void ProjectingWithSubQueriesFilteredByTheAggregateKey()
+		{
+			if (!Dialect.SupportsScalarSubSelects)
+				Assert.Ignore("Dialect does not support scalar sub-selects");
+
+			var result=db.Products.GroupBy(x => x.Supplier.Address.Country)
+			 .OrderBy(x=>x.Key)
+			 .Select(x => new { x.Key, MaxFreight = db.Orders.Where(y => y.ShippingAddress.Country == x.Key).Max(y => y.Freight), FirstOrder = db.Orders.Where(o => o.Employee.FirstName.StartsWith("A")).OrderBy(o => o.OrderId).Select(y => y.OrderId).First() })
+			 .ToList();
+
+			Assert.That(result.Count,Is.EqualTo(16));
+			Assert.That(result[15].MaxFreight, Is.EqualTo(830.75M));
+			Assert.That(result[15].FirstOrder, Is.EqualTo(10255));
+		}
+
+		[Test(Description = "NH-3681")]
+		public void SelectManyGroupByAggregateProjection()
+		{
+			var result = (from o in db.Orders
+						  from ol in o.OrderLines
+						  group ol by ol.Product.ProductId
+							  into grp
+							  select new
+							  {
+								  ProductId = grp.Key,
+								  Sum = grp.Sum(x => x.UnitPrice),
+								  Count = grp.Count(),
+								  Avg = grp.Average(x => x.UnitPrice),
+								  Min = grp.Min(x => x.UnitPrice),
+								  Max = grp.Max(x => x.UnitPrice),
+							  }
+				).ToList();
+
+			Assert.That(result.Count, Is.EqualTo(77));
+		}
+
+		[Test(Description = "NH-3797")]
+		public void GroupByComputedValue()
+		{
+			if (!TestDialect.SupportsComplexExpressionInGroupBy)
+				Assert.Ignore(Dialect.GetType().Name + " does not support complex group by expressions");
+			if (Sfi.ConnectionProvider.Driver is OdbcDriver)
+				Assert.Ignore("SQL Server seems unable to match complex group by and select list arguments when running over ODBC.");
+
+			var orderGroups = db.Orders.GroupBy(o => o.Customer.CustomerId == null ? 0 : 1).Select(g => new { Key = g.Key, Count = g.Count() }).ToList();
+			Assert.AreEqual(830, orderGroups.Sum(g => g.Count));
+		}
+
+		[Test(Description = "NH-3797")]
+		public void GroupByComputedValueInAnonymousType()
+		{
+			if (!TestDialect.SupportsComplexExpressionInGroupBy)
+				Assert.Ignore(Dialect.GetType().Name + " does not support complex group by expressions");
+			if (Sfi.ConnectionProvider.Driver is OdbcDriver)
+				Assert.Ignore("SQL Server seems unable to match complex group by and select list arguments when running over ODBC.");
+
+			var orderGroups = db.Orders.GroupBy(o => new { Key = o.Customer.CustomerId == null ? 0 : 1 }).Select(g => new { Key = g.Key, Count = g.Count() }).ToList();
+			Assert.AreEqual(830, orderGroups.Sum(g => g.Count));
+		}
+
+		[Test(Description = "NH-3797")]
+		public void GroupByComputedValueInObjectArray()
+		{
+			if (!TestDialect.SupportsComplexExpressionInGroupBy)
+				Assert.Ignore(Dialect.GetType().Name + " does not support complex group by expressions");
+			if (Sfi.ConnectionProvider.Driver is OdbcDriver)
+				Assert.Ignore("SQL Server seems unable to match complex group by and select list arguments when running over ODBC.");
+
+			var orderGroups = db.Orders.GroupBy(o => new[] { o.Customer.CustomerId == null ? 0 : 1, }).Select(g => new { Key = g.Key, Count = g.Count() }).ToList();
+			Assert.AreEqual(830, orderGroups.Sum(g => g.Count));
+		}
+
+		[Test(Description = "NH-3474")]
+		public void GroupByConstant()
+		{
+			var totals = db.Orders.GroupBy(o => 1).Select(g => new { Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight) }).ToList();
+			Assert.That(totals.Count, Is.EqualTo(1));
+			Assert.That(totals, Has.All.With.Property("Key").EqualTo(1));
+		}
+
+		[Test(Description = "NH-3474")]
+		public void GroupByConstantAnonymousType()
+		{
+			var totals = db.Orders.GroupBy(o => new { A = 1 }).Select(g => new { Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight) }).ToList();
+			Assert.That(totals.Count, Is.EqualTo(1));
+			Assert.That(totals, Has.All.With.Property("Key").With.Property("A").EqualTo(1));
+		}
+
+		[Test(Description = "NH-3474")]
+		public void GroupByConstantArray()
+		{
+			var totals = db.Orders.GroupBy(o => new object[] { 1 }).Select(g => new { Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight) }).ToList();
+			Assert.That(totals.Count, Is.EqualTo(1));
+			Assert.That(totals, Has.All.With.Property("Key").EqualTo(new object[] { 1 }));
+		}
+
+		[Test(Description = "NH-3474")]
+		public void GroupByKeyWithConstantInAnonymousType()
+		{
+			var totals = db.Orders.GroupBy(o => new { A = 1, B = o.Shipper.ShipperId }).Select(g => new { Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight) }).ToList();
+			Assert.That(totals.Count, Is.EqualTo(3));
+			Assert.That(totals, Has.All.With.Property("Key").With.Property("A").EqualTo(1));
+		}
+
+		[Test(Description = "NH-3474")]
+		public void GroupByKeyWithConstantInArray()
+		{
+			var totals = db.Orders.GroupBy(o => new[] { 1, o.Shipper.ShipperId }).Select(g => new { Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight) }).ToList();
+			Assert.That(totals.Count, Is.EqualTo(3));
+			Assert.That(totals, Has.All.With.Property("Key").Contains(1));
+		}
+
+		private int constKey;
+		[Test(Description = "NH-3474")]
+		public void GroupByKeyWithConstantFromVariable()
+		{
+			constKey = 1;
+			var q1 = db.Orders.GroupBy(o => constKey).Select(g => new {Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight)});
+			var q1a = db.Orders.GroupBy(o => "").Select(g => new {Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight)});
+			var q2 = db.Orders.GroupBy(o => new {A = constKey}).Select(g => new {Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight)});
+			var q3 = db.Orders.GroupBy(o => new object[] {constKey}).Select(g => new {Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight)});
+			var q3a = db.Orders.GroupBy(o => (IEnumerable<object>) new object[] {constKey}).Select(g => new {Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight)});
+			var q4 = db.Orders.GroupBy(o => new {A = constKey, B = o.Shipper.ShipperId}).Select(g => new {Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight)});
+			var q5 = db.Orders.GroupBy(o => new[] {constKey, o.Shipper.ShipperId}).Select(g => new {Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight)});
+			var q5a = db.Orders.GroupBy(o => (IEnumerable<int>) new[] {constKey, o.Shipper.ShipperId}).Select(g => new {Key = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Freight)});
+
+			var r1_1 = q1.ToList();
+			Assert.That(r1_1.Count, Is.EqualTo(1));
+			Assert.That(r1_1, Has.All.With.Property("Key").EqualTo(1));
+
+			var r1a_1 = q1a.ToList();
+			Assert.That(r1a_1.Count, Is.EqualTo(1));
+			Assert.That(r1a_1, Has.All.With.Property("Key").EqualTo(""));
+
+			var r2_1 = q2.ToList();
+			Assert.That(r2_1.Count, Is.EqualTo(1));
+			Assert.That(r2_1, Has.All.With.Property("Key").With.Property("A").EqualTo(1));
+
+			var r3_1 = q3.ToList();
+			Assert.That(r3_1.Count, Is.EqualTo(1));
+			Assert.That(r3_1, Has.All.With.Property("Key").EquivalentTo(new object[] { 1 }));
+
+			var r3a_1 = q3a.ToList();
+			Assert.That(r3a_1.Count, Is.EqualTo(1));
+			Assert.That(r3a_1, Has.All.With.Property("Key").EquivalentTo(new object[] { 1 }));
+
+			var r4_1 = q4.ToList();
+			Assert.That(r4_1.Count, Is.EqualTo(3));
+			Assert.That(r4_1, Has.All.With.Property("Key").With.Property("A").EqualTo(1));
+
+			var r5_1 = q5.ToList();
+			Assert.That(r5_1.Count, Is.EqualTo(3));
+			Assert.That(r5_1, Has.All.With.Property("Key").Contains(1));
+
+			var r6_1 = q5a.ToList();
+			Assert.That(r6_1.Count, Is.EqualTo(3));
+			Assert.That(r6_1, Has.All.With.Property("Key").Contains(1));
+
+			constKey = 2;
+
+			var r1_2 = q1.ToList();
+			Assert.That(r1_2.Count, Is.EqualTo(1));
+			Assert.That(r1_2, Has.All.With.Property("Key").EqualTo(2));
+
+			var r2_2 = q2.ToList();
+			Assert.That(r2_2.Count, Is.EqualTo(1));
+			Assert.That(r2_2, Has.All.With.Property("Key").With.Property("A").EqualTo(2));
+
+			var r3_2 = q3.ToList();
+			Assert.That(r3_2.Count, Is.EqualTo(1));
+			Assert.That(r3_2, Has.All.With.Property("Key").EquivalentTo(new object[] { 2 }));
+
+			var r3a_2 = q3a.ToList();
+			Assert.That(r3a_2.Count, Is.EqualTo(1));
+			Assert.That(r3a_2, Has.All.With.Property("Key").EquivalentTo(new object[] { 2 }));
+
+			var r4_2 = q4.ToList();
+			Assert.That(r4_2.Count, Is.EqualTo(3));
+			Assert.That(r4_2, Has.All.With.Property("Key").With.Property("A").EqualTo(2));
+
+			var r5_2 = q5.ToList();
+			Assert.That(r5_2.Count, Is.EqualTo(3));
+			Assert.That(r5_2, Has.All.With.Property("Key").Contains(2));
+
+			var r6_2 = q5.ToList();
+			Assert.That(r6_2.Count, Is.EqualTo(3));
+			Assert.That(r6_2, Has.All.With.Property("Key").Contains(2));
+		}
+
+		[Test(Description = "NH-3801")]
+		public void GroupByComputedValueWithJoinOnObject()
+		{
+			if (!TestDialect.SupportsComplexExpressionInGroupBy)
+				Assert.Ignore(Dialect.GetType().Name + " does not support complex group by expressions");
+			if (Sfi.ConnectionProvider.Driver is OdbcDriver)
+				Assert.Ignore("SQL Server seems unable to match complex group by and select list arguments when running over ODBC.");
+
+			var orderGroups = db.OrderLines.GroupBy(o => o.Order.Customer == null ? 0 : 1).Select(g => new { Key = g.Key, Count = g.Count() }).ToList();
+			Assert.AreEqual(2155, orderGroups.Sum(g => g.Count));
+		}
+
+		[Test(Description = "NH-3801")]
+		public void GroupByComputedValueWithJoinOnId()
+		{
+			if (!TestDialect.SupportsComplexExpressionInGroupBy)
+				Assert.Ignore(Dialect.GetType().Name + " does not support complex group by expressions");
+			if (Sfi.ConnectionProvider.Driver is OdbcDriver)
+				Assert.Ignore("SQL Server seems unable to match complex group by and select list arguments when running over ODBC.");
+
+			var orderGroups = db.OrderLines.GroupBy(o => o.Order.Customer.CustomerId == null ? 0 : 1).Select(g => new { Key = g.Key, Count = g.Count() }).ToList();
+			Assert.AreEqual(2155, orderGroups.Sum(g => g.Count));
+		}
+
+		[Test(Description = "NH-3801")]
+		public void GroupByComputedValueInAnonymousTypeWithJoinOnObject()
+		{
+			if (!TestDialect.SupportsComplexExpressionInGroupBy)
+				Assert.Ignore(Dialect.GetType().Name + " does not support complex group by expressions");
+			if (Sfi.ConnectionProvider.Driver is OdbcDriver)
+				Assert.Ignore("SQL Server seems unable to match complex group by and select list arguments when running over ODBC.");
+
+			var orderGroups = db.OrderLines.GroupBy(o => new { Key = o.Order.Customer == null ? 0 : 1 }).Select(g => new { Key = g.Key, Count = g.Count() }).ToList();
+			Assert.AreEqual(2155, orderGroups.Sum(g => g.Count));
+		}
+
+		[Test(Description = "NH-3801")]
+		public void GroupByComputedValueInAnonymousTypeWithJoinOnId()
+		{
+			if (!TestDialect.SupportsComplexExpressionInGroupBy)
+				Assert.Ignore(Dialect.GetType().Name + " does not support complex group by expressions");
+			if (Sfi.ConnectionProvider.Driver is OdbcDriver)
+				Assert.Ignore("SQL Server seems unable to match complex group by and select list arguments when running over ODBC.");
+
+			var orderGroups = db.OrderLines.GroupBy(o => new { Key = o.Order.Customer.CustomerId == null ? 0 : 1 }).Select(g => new { Key = g.Key, Count = g.Count() }).ToList();
+			Assert.AreEqual(2155, orderGroups.Sum(g => g.Count));
+		}
+
+		[Test(Description = "NH-3801")]
+		public void GroupByComputedValueInObjectArrayWithJoinOnObject()
+		{
+			if (!TestDialect.SupportsComplexExpressionInGroupBy)
+				Assert.Ignore(Dialect.GetType().Name + " does not support complex group by expressions");
+			if (Sfi.ConnectionProvider.Driver is OdbcDriver)
+				Assert.Ignore("SQL Server seems unable to match complex group by and select list arguments when running over ODBC.");
+
+			var orderGroups = db.OrderLines.GroupBy(o => new[] { o.Order.Customer == null ? 0 : 1 }).Select(g => new { Key = g.Key, Count = g.Count() }).ToList();
+			Assert.AreEqual(2155, orderGroups.Sum(g => g.Count));
+		}
+
+		[Test(Description = "NH-3801")]
+		public void GroupByComputedValueInObjectArrayWithJoinOnId()
+		{
+			if (!TestDialect.SupportsComplexExpressionInGroupBy)
+				Assert.Ignore(Dialect.GetType().Name + " does not support complex group by expressions");
+			if (Sfi.ConnectionProvider.Driver is OdbcDriver)
+				Assert.Ignore("SQL Server seems unable to match complex group by and select list arguments when running over ODBC.");
+
+			var orderGroups = db.OrderLines.GroupBy(o => new[] { o.Order.Customer.CustomerId == null ? 0 : 1 }).Select(g => new { Key = g.Key, Count = g.Count() }).ToList();
+			Assert.AreEqual(2155, orderGroups.Sum(g => g.Count));
+		}
+
+		[Test(Description = "NH-3801, NH-4062")]
+		public void GroupByComputedValueInObjectArrayWithJoinInRightSideOfCase()
+		{
+			if (!TestDialect.SupportsComplexExpressionInGroupBy)
+				Assert.Ignore(Dialect.GetType().Name + " does not support complex group by expressions");
+			if (Sfi.ConnectionProvider.Driver is OdbcDriver)
+				Assert.Ignore("SQL Server seems unable to match complex group by and select list arguments when running over ODBC.");
+
+			var orderGroups = db.OrderLines.GroupBy(o => new[] { o.Order.Customer.CustomerId == null ? "unknown" : o.Order.Customer.CompanyName }).Select(g => new { Key = g.Key, Count = g.Count() }).ToList();
+			Assert.AreEqual(2155, orderGroups.Sum(g => g.Count));
+		}
+
+		[Test(Description = "NH-3844")]
+		public void GroupByComputedValueFromNestedArraySelect()
+		{
+			if (!TestDialect.SupportsComplexExpressionInGroupBy)
+				Assert.Ignore(Dialect.GetType().Name + " does not support complex group by expressions");
+			if (Sfi.ConnectionProvider.Driver is OdbcDriver)
+				Assert.Ignore("SQL Server seems unable to match complex group by and select list arguments when running over ODBC.");
+
+			var orderGroups = db.OrderLines.Select(o => new object[] { o }).GroupBy(x => new object[] { ((OrderLine)x[0]).Order.Customer == null ? 0 : 1 }).Select(g => new { Key = g.Key, Count = g.Count() }).ToList();
+			Assert.AreEqual(2155, orderGroups.Sum(g => g.Count));
+		}
+
+		[Test(Description = "NH-3844")]
+		public void GroupByComputedValueFromNestedObjectSelect()
+		{
+			if (!TestDialect.SupportsComplexExpressionInGroupBy)
+				Assert.Ignore(Dialect.GetType().Name + " does not support complex group by expressions");
+			if (Sfi.ConnectionProvider.Driver is OdbcDriver)
+				Assert.Ignore("SQL Server seems unable to match complex group by and select list arguments when running over ODBC.");
+
+			var orderGroups = db.OrderLines.Select(o => new { OrderLine = (object)o }).GroupBy(x => new object[] { ((OrderLine)x.OrderLine).Order.Customer == null ? 0 : 1 }).Select(g => new { Key = g.Key, Count = g.Count() }).ToList();
+			Assert.AreEqual(2155, orderGroups.Sum(g => g.Count));
+		}
+
+		[Test(Description="GH-3076")]
+		public void NestedNonAggregateGroupBy()
+		{
+			var list = db.OrderLines
+				.GroupBy(x => new { x.Order.OrderId, x.Product.ProductId }) // this works fine
+				.GroupBy(x => x.Key.ProductId) // exception: "A recognition error occurred"
+				.ToList();
+
+			Assert.That(list, Has.Count.EqualTo(77));
+		}
+
+		[Test(Description="GH-3076")]
+		public void NestedNonAggregateGroupBySelect()
+		{
+			var list = db.OrderLines
+				.GroupBy(x => new { x.Order.OrderId, x.Product.ProductId }) // this works fine
+				.GroupBy(x => x.Key.ProductId) // exception: "A recognition error occurred"
+				.Select(x => new { ProductId = x })
+				.ToList();
+
+			Assert.That(list, Has.Count.EqualTo(77));
 		}
 
 		private static void CheckGrouping<TKey, TElement>(IEnumerable<IGrouping<TKey, TElement>> groupedItems, Func<TElement, TKey> groupBy)
@@ -502,7 +947,6 @@ namespace NHibernate.Test.Linq.ByMethod
 			}
 		}
 
-
 		[Test(Description = "NH-3446"), KnownBug("NH-3446", "NHibernate.HibernateException")]
 		public void GroupByOrderByKeySelectToClass()
 		{
@@ -512,6 +956,60 @@ namespace NHibernate.Test.Linq.ByMethod
 				.ToList();
 		}
 
+		[Test(Description = "NH-3743")]
+		public void FetchBeforeGroupBy()
+		{
+			var result = db.Orders
+				.Fetch(x => x.Customer)
+				.GroupBy(x => x.Customer.CompanyName)
+				.OrderBy(x => x.Key)
+				.Select(x => new { P0 = x.Key, P1 = x.Count() })
+				.ToArray();
+
+			Assert.True(result.Any());
+		}
+
+		[Test]
+		public void SelectArrayIndexBeforeGroupBy()
+		{
+			var result = db.Orders
+							.SelectMany(o => o.OrderLines.Select(c => c.Id).DefaultIfEmpty().Select(c => new object[] {c, o}))
+							.GroupBy(g => g[0], g => (Order) g[1])
+							.Select(g => new[] {g.Key, g.Count(), g.Max(x => x.OrderDate)});
+
+			Assert.True(result.Any());
+		}
+
+		[Test]
+		public void SelectMemberInitBeforeGroupBy()
+		{
+			var result = db.Orders
+							.Select(o => new OrderGroup {OrderId = o.OrderId, OrderDate = o.OrderDate})
+							.GroupBy(o => o.OrderId)
+							.Select(g => new OrderGroup {OrderId = g.Key, OrderDate = g.Max(o => o.OrderDate)})
+							.ToList();
+
+			Assert.True(result.Any());
+		}
+
+		[Test]
+		public void SelectNewBeforeGroupBy()
+		{
+			var result = db.Orders
+							.Select(o => new {o.OrderId, o.OrderDate})
+							.GroupBy(o => o.OrderId)
+							.Select(g => new {OrderId = g.Key, OrderDate = g.Max(o => o.OrderDate)})
+							.ToList();
+
+			Assert.True(result.Any());
+		}
+
+		private class OrderGroup
+		{
+			public int OrderId { get; set; }
+
+			public DateTime? OrderDate { get; set; }
+		}
 
 		private class GroupInfo
 		{

@@ -8,6 +8,7 @@ using NHibernate.DomainModel;
 using NHibernate.Engine;
 using NHibernate.Criterion;
 using NHibernate.Mapping;
+using NHibernate.Util;
 using NUnit.Framework;
 using Single=NHibernate.DomainModel.Single;
 
@@ -19,7 +20,7 @@ namespace NHibernate.Test.Legacy
 	[TestFixture]
 	public class MasterDetailTest : TestCase
 	{
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get
 			{
@@ -41,6 +42,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void ParentChildren()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			ISession session = OpenSession();
 
 			M parent = new M();
@@ -401,7 +405,7 @@ namespace NHibernate.Test.Legacy
 			master.AddDetail(d1);
 			master.AddDetail(d2);
 
-			if (Dialect.SupportsSubSelects)
+			if (Dialect.SupportsScalarSubSelects)
 			{
 				string hql = "from d in class NHibernate.DomainModel.Detail, m in class NHibernate.DomainModel.Master " +
 				             "where m = d.Master and m.Outgoing.size = 0 and m.Incoming.size = 0";
@@ -659,8 +663,14 @@ namespace NHibernate.Test.Legacy
 			s.Flush();
 			s.Disconnect();
 			MemoryStream stream = new MemoryStream();
-			BinaryFormatter f = new BinaryFormatter();
+			var f = new BinaryFormatter
+			{
+#if !NETFX
+				SurrogateSelector = new SerializationHelper.SurrogateSelector()	
+#endif
+			};
 			f.Serialize(stream, s);
+			s.Close();
 			stream.Position = 0;
 			Console.WriteLine(stream.Length);
 
@@ -694,6 +704,7 @@ namespace NHibernate.Test.Legacy
 			s.Disconnect();
 			stream = new MemoryStream();
 			f.Serialize(stream, s);
+			s.Close();
 			stream.Position = 0;
 
 			s = (ISession) f.Deserialize(stream);
@@ -837,6 +848,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void CollectionReplaceOnUpdate()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			ISession s = OpenSession();
 			ITransaction t = s.BeginTransaction();
 			Category c = new Category();
@@ -882,6 +896,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void CollectionReplace2()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			ISession s = OpenSession();
 			ITransaction t = s.BeginTransaction();
 			Category c = new Category();
@@ -921,6 +938,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void CollectionReplace()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			ISession s = OpenSession();
 			ITransaction t = s.BeginTransaction();
 			Category c = new Category();
@@ -966,6 +986,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void Categories()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			Category c = new Category();
 			c.Name = Category.RootCategory;
 			Category c1 = new Category();
@@ -1007,6 +1030,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void CollectionRefresh()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			ISession s = OpenSession();
 			Category c = new Category();
 			IList<Category> list = new List<Category>();
@@ -1050,6 +1076,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void CachedCollectionRefresh()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			ISession s = OpenSession();
 			Category c = new Category();
 			IList<Category> list = new List<Category>();
@@ -1197,7 +1226,7 @@ namespace NHibernate.Test.Legacy
 			s.Flush();
 			s.Close();
 
-			sessions.EvictCollection("NHibernate.DomainModel.Assignable.Categories");
+			Sfi.EvictCollection("NHibernate.DomainModel.Assignable.Categories");
 
 			s = OpenSession();
 			a = (Assignable) s.Get(typeof(Assignable), "foo");
@@ -1209,7 +1238,7 @@ namespace NHibernate.Test.Legacy
 			s.Flush();
 			s.Close();
 
-			sessions.EvictCollection("NHibernate.DomainModel.Assignable.Categories");
+			Sfi.EvictCollection("NHibernate.DomainModel.Assignable.Categories");
 
 			s = OpenSession();
 			a = (Assignable) s.Get(typeof(Assignable), "foo");
@@ -1222,7 +1251,7 @@ namespace NHibernate.Test.Legacy
 			Assert.AreEqual(3, a.Categories.Count);
 			s.Close();
 
-			sessions.EvictCollection("NHibernate.DomainModel.Assignable.Categories");
+			Sfi.EvictCollection("NHibernate.DomainModel.Assignable.Categories");
 
 			s = OpenSession();
 			a = (Assignable) s.Get(typeof(Assignable), "foo");
@@ -1235,6 +1264,9 @@ namespace NHibernate.Test.Legacy
 		[Test]
 		public void PolymorphicCriteria()
 		{
+			if (!TestDialect.SupportsEmptyInsertsOrHasNonIdentityNativeGenerator)
+				Assert.Ignore("Support of empty inserts is required");
+
 			ISession s = OpenSession();
 			ITransaction txn = s.BeginTransaction();
 			Category f = new Category();
@@ -1257,7 +1289,7 @@ namespace NHibernate.Test.Legacy
 		public void ToStringWithNoIdentifier()
 		{
 			NHibernateUtil.Entity(typeof(Master)).ToLoggableString(new Master(),
-			                                                       (ISessionFactoryImplementor) sessions);
+			                                                       (ISessionFactoryImplementor) Sfi);
 		}
 
 		[Test]

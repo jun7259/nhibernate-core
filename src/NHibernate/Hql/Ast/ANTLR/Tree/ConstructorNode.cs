@@ -8,12 +8,13 @@ using NHibernate.Util;
 namespace NHibernate.Hql.Ast.ANTLR.Tree
 {
 	[CLSCompliant(false)]
-	public class ConstructorNode : SelectExpressionList, ISelectExpression 
+	public class ConstructorNode : SelectExpressionList, ISelectExpressionExtension
 	{
 		private IType[] _constructorArgumentTypes;
 		private ConstructorInfo _constructor;
 		private bool _isMap;
 		private bool _isList;
+		private int _scalarColumnIndex = -1;
 
 		public ConstructorNode(IToken token) : base(token)
 		{
@@ -26,9 +27,9 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 
 		public string[] GetAliases()
 		{
-			ISelectExpression[] selectExpressions = CollectSelectExpressions();
-			string[] aliases = new string[selectExpressions.Length];
-			for (int i = 0; i < selectExpressions.Length; i++)
+			var selectExpressions = GetSelectExpressions();
+			string[] aliases = new string[selectExpressions.Count];
+			for (int i = 0; i < selectExpressions.Count; i++)
 			{
 				string alias = selectExpressions[i].Alias;
 				aliases[i] = alias ?? i.ToString();
@@ -42,6 +43,41 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			return GetChild(1);
 		}
 
+		public int ScalarColumnIndex
+		{
+			get { return _scalarColumnIndex; }
+		}
+
+		// Since v5.4
+		[Obsolete("Use overload with aliasCreator parameter instead.")]
+		public void SetScalarColumn(int i)
+		{
+			ISelectExpression[] selectExpressions = CollectSelectExpressions();
+			// Invoke setScalarColumnText on each constructor argument.
+			for (int j = 0; j < selectExpressions.Length; j++)
+			{
+				ISelectExpression selectExpression = selectExpressions[j];
+				selectExpression.SetScalarColumn(j);
+			}
+		}
+
+		/// <inheritdoc />
+		public string[] SetScalarColumn(int i, Func<int, int, string> aliasCreator)
+		{
+			var selectExpressions = GetSelectExpressions();
+			var aliases = new List<string>();
+			// Invoke setScalarColumnText on each constructor argument.
+			for (var j = 0; j < selectExpressions.Count; j++)
+			{
+				var selectExpression = selectExpressions[j];
+				aliases.AddRange(selectExpression.SetScalarColumn(j, aliasCreator));
+			}
+
+			return aliases.ToArray();
+		}
+
+		// Since v5.4
+		[Obsolete("This method has no more usage in NHibernate and will be removed in a future version.")]
 		public void SetScalarColumnText(int i)
 		{
 			ISelectExpression[] selectExpressions = CollectSelectExpressions();
@@ -99,32 +135,25 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			_constructorArgumentTypes = ResolveConstructorArgumentTypes();
 			string path = ( ( IPathNode ) GetChild(0) ).Path;
 
-			if (path.ToLowerInvariant() == "map")
+			if (string.Equals(path, "map", StringComparison.OrdinalIgnoreCase))
 			{
 				_isMap = true;
 			}
-			else if (path.ToLowerInvariant() == "list") 
+			else if (string.Equals(path, "list", StringComparison.OrdinalIgnoreCase)) 
 			{
 				_isList = true;
 			}
 			else 
 			{
-                _constructor = ResolveConstructor(path);
+				_constructor = ResolveConstructor(path);
 			}
 		}
 
 		private IType[] ResolveConstructorArgumentTypes()
 		{
-			ISelectExpression[] argumentExpressions = CollectSelectExpressions();
-			
-			if ( argumentExpressions == null ) 
-			{
-				// return an empty Type array
-				return new IType[]{};
-			}
-
-			IType[] types = new IType[argumentExpressions.Length];
-			for ( int x = 0; x < argumentExpressions.Length; x++ ) 
+			var argumentExpressions = GetSelectExpressions();
+			var types = new IType[argumentExpressions.Count];
+			for (var x = 0; x < argumentExpressions.Count; x++)
 			{
 				types[x] = argumentExpressions[x].DataType;
 			}

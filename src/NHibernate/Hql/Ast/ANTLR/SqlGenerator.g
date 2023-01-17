@@ -1,7 +1,7 @@
 /**
  * SQL Generator Tree Parser, providing SQL rendering of SQL ASTs produced by the previous phase, HqlSqlWalker.  All
  * syntax decoration such as extra spaces, lack of spaces, extra parens, etc. should be added by this class.
- * <br>
+ * <br/>
  * This grammar processes the HQL/SQL AST and produces an SQL string.  The intent is to move dialect-specific
  * code into a sub-class that will override some of the methods, just like the other two grammars in this system.
  * @author Joshua Davis (joshua@hibernate.org)
@@ -82,7 +82,9 @@ public whereClause
 	;
 
 whereClauseExpr
+	// 6.0 TODO: Remove "(SQL_TOKEN) => conditionList"
 	: (SQL_TOKEN) => conditionList
+	| filters ( { Out(" and "); } booleanExpr [ true ] )?
 	| booleanExpr[ false ]
 	;
 
@@ -148,7 +150,7 @@ selectExpr
 	;
 
 count
-	: ^(COUNT { Out("count("); }  ( distinctOrAll ) ? countExpr { Out(")"); } )
+	: ^(c=COUNT { OutAggregateFunctionName(c); Out("("); }  ( distinctOrAll ) ? countExpr { Out(")"); } )
 	;
 
 distinctOrAll
@@ -186,11 +188,15 @@ fromTable
 	// Write the table node (from fragment) and all the join fragments associated with it.
 	: ^( a=FROM_FRAGMENT  { Out(a); } (tableJoin [ a ])* )
 	| ^( a=JOIN_FRAGMENT  { Out(a); } (tableJoin [ a ])* )
+	| ^( a=ENTITY_JOIN    { Out(a); } (tableJoin [ a ])* )
+	| ^( a=JOIN_SUBQUERY  { StartJoinSubquery(); } selectStatement { EndJoinSubquery(a); } (tableJoin [ a ])* )
 	;
 
 tableJoin [ IASTNode parent ]
 	: ^( c=JOIN_FRAGMENT { Out(" "); Out($c); } (tableJoin [ c ] )* )
 	| ^( d=FROM_FRAGMENT { NestedFromFragment($d,parent); } (tableJoin [ d ] )* )
+	| ^( e=ENTITY_JOIN   { Out(" "); Out(e); } (tableJoin [ e ])* )
+	| ^( f=JOIN_SUBQUERY { Out(" "); StartJoinSubquery(); } selectStatement { EndJoinSubquery(f); } (tableJoin [ f ])* )
 	;
 
 booleanOp[ bool parens ]
@@ -305,10 +311,10 @@ additiveExpr
 	;
 
 bitwiseExpr
-	: ^(BAND expr { Out("&"); } nestedExpr)
-	| ^(BOR expr { Out("|"); } nestedExpr)
-	| ^(BXOR expr { Out("^"); } nestedExpr)
-	| ^(BNOT { Out("~"); } nestedExpr)	
+	: ^(BAND { BeginBitwiseOp("band"); } expr nestedExpr { EndBitwiseOp("band"); })
+	| ^(BOR { BeginBitwiseOp("bor"); } expr nestedExpr { EndBitwiseOp("bor"); })
+	| ^(BXOR { BeginBitwiseOp("bxor"); } expr nestedExpr { EndBitwiseOp("bxor"); })
+	| ^(BNOT { BeginBitwiseOp("bnot"); } nestedExpr { EndBitwiseOp("bnot"); })
 	;
 
 multiplicativeExpr
@@ -341,7 +347,7 @@ caseExpr
 	;
 
 aggregate
-	: ^(a=AGGREGATE { Out(a); Out("("); }  expr { Out(")"); } )
+	: ^(a=AGGREGATE { OutAggregateFunctionName(a); Out("("); }  expr { Out(")"); } )
 	;
 
 
@@ -370,6 +376,7 @@ addrExpr
 	: ^(r=DOT . .) { Out(r); }
 	| i=ALIAS_REF { Out(i); }
 	| ^(j=INDEX_OP .*) { Out(j); }
+	| v=RESULT_VARIABLE_REF { Out(v); }
 	;
 
 sqlToken

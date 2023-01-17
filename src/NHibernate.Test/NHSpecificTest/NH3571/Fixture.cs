@@ -15,7 +15,7 @@ namespace NHibernate.Test.NHSpecificTest.NH3571
 			get { return "NHibernate.Test"; }
 		}
 
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get
 			{
@@ -73,7 +73,6 @@ namespace NHibernate.Test.NHSpecificTest.NH3571
 					tran.Commit();
 				}
 			}
-
 		}
 
 		[Test]
@@ -91,7 +90,6 @@ namespace NHibernate.Test.NHSpecificTest.NH3571
 				Assert.AreEqual("First Product", product.Details.Properties["Name"]);
 			}
 		}
-
 
 		[Test]
 		public void MultipleQueriesShouldNotCache()
@@ -113,7 +111,6 @@ namespace NHibernate.Test.NHSpecificTest.NH3571
 			}
 		}
 
-
 		[Test]
 		public void DifferentKeyInDynamicComponentDictionaryReturnsDifferentExpressionKeys()
 		{
@@ -124,8 +121,8 @@ namespace NHibernate.Test.NHSpecificTest.NH3571
 				Expression<Func<IEnumerable>> key2 = () => (from a in session.Query<Product>() where (string) a.Details.Properties["Description"] == "val" select a);
 // ReSharper restore AccessToDisposedClosure
 
-				var nhKey1 = new NhLinqExpression(key1.Body, sessions);
-				var nhKey2 = new NhLinqExpression(key2.Body, sessions);
+				var nhKey1 = new NhLinqExpression(key1.Body, Sfi);
+				var nhKey2 = new NhLinqExpression(key2.Body, Sfi);
 
 				Assert.AreNotEqual(nhKey1.Key, nhKey2.Key);
 			}

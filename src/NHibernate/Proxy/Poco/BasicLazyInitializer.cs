@@ -8,12 +8,12 @@ using NHibernate.Util;
 
 namespace NHibernate.Proxy.Poco
 {
+	// Obsolete since v5.2
 	/// <summary> Lazy initializer for POCOs</summary>
 	[Serializable]
+	[Obsolete("DynamicProxy has been obsoleted, use static proxies instead (see StaticProxyFactory)")]
 	public abstract class BasicLazyInitializer : AbstractLazyInitializer
 	{
-		private static readonly IEqualityComparer IdentityEqualityComparer = new IdentityEqualityComparer();
-
 		internal System.Type persistentClass;
 		protected internal MethodInfo getIdentifierMethod;
 		protected internal MethodInfo setIdentifierMethod;
@@ -22,14 +22,14 @@ namespace NHibernate.Proxy.Poco
 
 		protected internal BasicLazyInitializer(string entityName, System.Type persistentClass, object id, 
 			MethodInfo getIdentifierMethod, MethodInfo setIdentifierMethod, 
-			IAbstractComponentType componentIdType, ISessionImplementor session)
+			IAbstractComponentType componentIdType, ISessionImplementor session, bool overridesEquals)
 			: base(entityName, id, session)
 		{
 			this.persistentClass = persistentClass;
 			this.getIdentifierMethod = getIdentifierMethod;
 			this.setIdentifierMethod = setIdentifierMethod;
 			this.componentIdType = componentIdType;
-			overridesEquals = ReflectHelper.OverridesEquals(persistentClass);
+			this.overridesEquals = overridesEquals;
 		}
 
 		/// <summary>
@@ -71,7 +71,7 @@ namespace NHibernate.Proxy.Poco
 			{
 				if (!overridesEquals && methodName == "GetHashCode")
 				{
-					return IdentityEqualityComparer.GetHashCode(proxy);
+					return ReferenceComparer<object>.Instance.GetHashCode(proxy);
 				}
 				else if (IsEqualToIdentifierMethod(method))
 				{
@@ -90,7 +90,7 @@ namespace NHibernate.Proxy.Poco
 			{
 				if (!overridesEquals && methodName == "Equals")
 				{
-					return IdentityEqualityComparer.Equals(args[0], proxy);
+					return ReferenceComparer<object>.Instance.Equals(args[0], proxy);
 				}
 				else if (setIdentifierMethod!=null&&method.Equals(setIdentifierMethod))
 				{

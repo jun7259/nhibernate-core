@@ -1,10 +1,14 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
+using System.Linq;
+using System.Linq.Expressions;
+using NHibernate.Collection.Trackers;
 using NHibernate.DebugHelpers;
 using NHibernate.Engine;
+using NHibernate.Linq;
 using NHibernate.Loader;
 using NHibernate.Persister.Collection;
 using NHibernate.Type;
@@ -20,17 +24,24 @@ namespace NHibernate.Collection.Generic
 	/// <typeparam name="TValue">The type of the elements in the IDictionary.</typeparam>
 	[Serializable]
 	[DebuggerTypeProxy(typeof(DictionaryProxy<,>))]
-	public class PersistentGenericMap<TKey, TValue> : AbstractPersistentCollection, IDictionary<TKey, TValue>, ICollection
+	public partial class PersistentGenericMap<TKey, TValue> : AbstractPersistentCollection, IDictionary<TKey, TValue>, IReadOnlyDictionary<TKey, TValue>, ICollection
 	{
 		protected IDictionary<TKey, TValue> WrappedMap;
+		private readonly ICollection<TValue> _wrappedValues;
 
-		public PersistentGenericMap() { }
+		public PersistentGenericMap()
+		{
+			_wrappedValues = new ValuesWrapper(this);
+		}
 
 		/// <summary>
 		/// Construct an uninitialized PersistentGenericMap.
 		/// </summary>
 		/// <param name="session">The ISession the PersistentGenericMap should be a part of.</param>
-		public PersistentGenericMap(ISessionImplementor session) : base(session) { }
+		public PersistentGenericMap(ISessionImplementor session) : base(session)
+		{
+			_wrappedValues = new ValuesWrapper(this);
+		}
 
 		/// <summary>
 		/// Construct an initialized PersistentGenericMap based off the values from the existing IDictionary.
@@ -41,17 +52,23 @@ namespace NHibernate.Collection.Generic
 			: base(session)
 		{
 			WrappedMap = map;
+			_wrappedValues = new ValuesWrapper(this);
 			SetInitialized();
 			IsDirectlyAccessible = true;
 		}
 
+		internal override AbstractQueueOperationTracker CreateQueueOperationTracker()
+		{
+			var entry = Session.PersistenceContext.GetCollectionEntry(this);
+			return new MapQueueOperationTracker<TKey, TValue>(entry.LoadedPersister);
+		}
+
 		public override object GetSnapshot(ICollectionPersister persister)
 		{
-			EntityMode entityMode = Session.EntityMode;
 			Dictionary<TKey, TValue> clonedMap = new Dictionary<TKey, TValue>(WrappedMap.Count);
 			foreach (KeyValuePair<TKey, TValue> e in WrappedMap)
 			{
-				object copy = persister.ElementType.DeepCopy(e.Value, entityMode, persister.Factory);
+				object copy = persister.ElementType.DeepCopy(e.Value, persister.Factory);
 				clonedMap[e.Key] = (TValue)copy;
 			}
 			return clonedMap;
@@ -73,7 +90,9 @@ namespace NHibernate.Collection.Generic
 			}
 			foreach (KeyValuePair<TKey, TValue> entry in WrappedMap)
 			{
-				if (elementType.IsDirty(entry.Value, xmap[entry.Key], Session))
+				// This method is not currently called if a key has been removed/added, but better be on the safe side.
+				if (!xmap.TryGetValue(entry.Key, out var value) ||
+					elementType.IsDirty(value, entry.Value, Session))
 				{
 					return false;
 				}
@@ -96,6 +115,13 @@ namespace NHibernate.Collection.Generic
 			WrappedMap = (IDictionary<TKey, TValue>)persister.CollectionType.Instantiate(anticipatedSize);
 		}
 
+		public override void ApplyQueuedOperations()
+		{
+			var queueOperation = (AbstractMapQueueOperationTracker<TKey, TValue>) QueueOperationTracker;
+			queueOperation?.ApplyChanges(WrappedMap);
+			QueueOperationTracker = null;
+		}
+
 		public override bool Empty
 		{
 			get { return (WrappedMap.Count == 0); }
@@ -107,7 +133,7 @@ namespace NHibernate.Collection.Generic
 			return StringHelper.CollectionToString(WrappedMap);
 		}
 
-		public override object ReadFrom(IDataReader rs, ICollectionPersister role, ICollectionAliases descriptor, object owner)
+		public override object ReadFrom(DbDataReader rs, ICollectionPersister role, ICollectionAliases descriptor, object owner)
 		{
 			object element = role.ReadElement(rs, owner, descriptor.SuffixedElementAliases, Session);
 			object index = role.ReadIndex(rs, descriptor.SuffixedIndexAliases, Session);
@@ -204,35 +230,16 @@ namespace NHibernate.Collection.Generic
 			return sn[((KeyValuePair<TKey, TValue>)entry).Key];
 		}
 
-		public override bool Equals(object other)
-		{
-			var that = other as IDictionary<TKey, TValue>;
-			if (that == null)
-			{
-				return false;
-			}
-			Read();
-			return CollectionHelper.DictionaryEquals(WrappedMap, that);
-		}
-
-		public override int GetHashCode()
-		{
-			Read();
-			return WrappedMap.GetHashCode();
-		}
-
 		public override bool EntryExists(object entry, int i)
 		{
 			return WrappedMap.ContainsKey(((KeyValuePair<TKey, TValue>)entry).Key);
 		}
 
-
 		#region IDictionary<TKey,TValue> Members
 
 		public bool ContainsKey(TKey key)
 		{
-			bool? exists = ReadIndexExistence(key);
-			return !exists.HasValue ? WrappedMap.ContainsKey(key) : exists.Value;
+			return ReadKeyExistence<TKey, TValue>(key) ?? WrappedMap.ContainsKey(key);
 		}
 
 		public void Add(TKey key, TValue value)
@@ -243,13 +250,20 @@ namespace NHibernate.Collection.Generic
 			}
 			if (PutQueueEnabled)
 			{
-				object old = ReadElementByIndex(key);
-				if (old != Unknown)
+				var found = TryReadElementByKey<TKey, TValue>(key, out _, out _);
+				if (found.HasValue)
 				{
-					QueueOperation(new PutDelayedOperation(this, key, value, old == NotFound ? null : old));
+					if (found.Value)
+					{
+						throw new ArgumentException("An item with the same key has already been added."); // Mimic dictionary behavior
+					}
+
+					QueueAddElementByKey(key, value);
+
 					return;
 				}
 			}
+
 			Initialize(true);
 			WrappedMap.Add(key, value);
 			Dirty();
@@ -257,8 +271,10 @@ namespace NHibernate.Collection.Generic
 
 		public bool Remove(TKey key)
 		{
-			object old = PutQueueEnabled ? ReadElementByIndex(key) : Unknown;
-			if (old == Unknown) // queue is not enabled for 'puts', or element not found
+			var oldValue = default(TValue);
+			var existsInDb = default(bool?);
+			var found = PutQueueEnabled ? TryReadElementByKey(key, out oldValue, out existsInDb) : null;
+			if (!found.HasValue) // queue is not enabled for 'puts' or collection was initialized
 			{
 				Initialize(true);
 				bool contained = WrappedMap.Remove(key);
@@ -269,66 +285,70 @@ namespace NHibernate.Collection.Generic
 				return contained;
 			}
 
-			QueueOperation(new RemoveDelayedOperation(this, key, old == NotFound ? null : old));
-			return true;
+			return QueueRemoveElementByKey(key, oldValue, existsInDb);
 		}
-
 
 		public bool TryGetValue(TKey key, out TValue value)
 		{
-			object result = ReadElementByIndex(key);
-			if (result == Unknown)
+			var found = TryReadElementByKey(key, out value, out _);
+			if (!found.HasValue) // collection was initialized
 			{
 				return WrappedMap.TryGetValue(key, out value);
 			}
-			if(result == NotFound)
+
+			if (found.Value)
 			{
-				value = default(TValue);
-				return false;
+				return true;
 			}
-			value = (TValue)result;
-			return true;
+
+			value = default(TValue);
+			return false;
 		}
 
 		public TValue this[TKey key]
 		{
 			get
 			{
-				object result = ReadElementByIndex(key);
-				if (result == Unknown)
+				var found = TryReadElementByKey<TKey, TValue>(key, out var value, out _);
+				if (!found.HasValue) // collection was initialized
 				{
 					return WrappedMap[key];
 				}
-				if (result == NotFound)
+
+				if (!found.Value)
 				{
 					throw new KeyNotFoundException();
 				}
-				return (TValue) result;
+
+				return value;
 			}
 			set
 			{
 				// NH Note: the assignment in NET work like the put method in JAVA (mean assign or add)
 				if (PutQueueEnabled)
 				{
-					object old = ReadElementByIndex(key);
-					if (old != Unknown)
+					var found = TryReadElementByKey<TKey, TValue>(key, out var oldValue, out var existsInDb);
+					if (found.HasValue)
 					{
-						QueueOperation(new PutDelayedOperation(this, key, value, old == NotFound ? null : old));
+						QueueSetElementByKey(key, value, oldValue, existsInDb);
+
 						return;
 					}
 				}
+
 				Initialize(true);
-				TValue tempObject;
-				WrappedMap.TryGetValue(key, out tempObject);
-				WrappedMap[key] = value;
-				TValue old2 = tempObject;
-				// would be better to use the element-type to determine
-				// whether the old and the new are equal here; the problem being
-				// we do not necessarily have access to the element type in all
-				// cases
-				if (!ReferenceEquals(value, old2))
+				if (!WrappedMap.TryGetValue(key, out var old))
 				{
+					WrappedMap.Add(key, value);
 					Dirty();
+				}
+				else
+				{
+					WrappedMap[key] = value;
+					if (!EqualityComparer<TValue>.Default.Equals(value, old))
+					{
+						Dirty();
+					}
 				}
 			}
 		}
@@ -346,9 +366,18 @@ namespace NHibernate.Collection.Generic
 		{
 			get
 			{
-				Read();
-				return WrappedMap.Values;
+				return _wrappedValues;
 			}
+		}
+
+		IEnumerable<TKey> IReadOnlyDictionary<TKey, TValue>.Keys
+		{
+			get { return Keys; }
+		}
+
+		IEnumerable<TValue> IReadOnlyDictionary<TKey, TValue>.Values
+		{
+			get { return Values; }
 		}
 
 		#endregion
@@ -364,7 +393,7 @@ namespace NHibernate.Collection.Generic
 		{
 			if (ClearQueueEnabled)
 			{
-				QueueOperation(new ClearDelayedOperation(this));
+				QueueClearCollection();
 			}
 			else
 			{
@@ -379,7 +408,7 @@ namespace NHibernate.Collection.Generic
 
 		public bool Contains(KeyValuePair<TKey, TValue> item)
 		{
-			bool? exists = ReadIndexExistence(item.Key);
+			bool? exists = ReadKeyExistence<TKey, TValue>(item.Key);
 			if (!exists.HasValue)
 			{
 				return WrappedMap.Contains(item);
@@ -397,24 +426,8 @@ namespace NHibernate.Collection.Generic
 
 		public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
 		{
-			int c = Count;
-			var keys = new TKey[c];
-			var values = new TValue[c];
-			if (Keys != null)
-			{
-				Keys.CopyTo(keys, arrayIndex);
-			}
-			if (Values != null)
-			{
-				Values.CopyTo(values, arrayIndex);
-			}
-			for (int i = arrayIndex; i < c; i++)
-			{
-				if (keys[i] != null || values[i] != null)
-				{
-					array.SetValue(new KeyValuePair<TKey, TValue>(keys[i], values[i]), i);
-				}
-			}
+			Read();
+			WrappedMap.CopyTo(array, arrayIndex);
 		}
 
 		public bool Remove(KeyValuePair<TKey, TValue> item)
@@ -442,9 +455,18 @@ namespace NHibernate.Collection.Generic
 
 		#region ICollection Members
 
-		public void CopyTo(Array array, int index)
+		public void CopyTo(Array array, int arrayIndex)
 		{
-			CopyTo((KeyValuePair<TKey, TValue>[]) array, index);
+			Read();
+			if (WrappedMap is ICollection collection)
+			{
+				collection.CopyTo(array, arrayIndex);
+			}
+			else
+			{
+				foreach (var item in WrappedMap)
+					array.SetValue(item, arrayIndex++);
+			}
 		}
 
 		public object SyncRoot
@@ -481,6 +503,8 @@ namespace NHibernate.Collection.Generic
 
 		#region DelayedOperations
 
+		// Since v5.3
+		[Obsolete("This class has no more usages in NHibernate and will be removed in a future version.")]
 		protected sealed class ClearDelayedOperation : IDelayedOperation
 		{
 			private readonly PersistentGenericMap<TKey, TValue> _enclosingInstance;
@@ -506,6 +530,8 @@ namespace NHibernate.Collection.Generic
 			}
 		}
 
+		// Since v5.3
+		[Obsolete("This class has no more usages in NHibernate and will be removed in a future version.")]
 		protected sealed class PutDelayedOperation : IDelayedOperation
 		{
 			private readonly PersistentGenericMap<TKey, TValue> _enclosingInstance;
@@ -537,6 +563,8 @@ namespace NHibernate.Collection.Generic
 			}
 		}
 
+		// Since v5.3
+		[Obsolete("This class has no more usages in NHibernate and will be removed in a future version.")]
 		protected sealed class RemoveDelayedOperation : IDelayedOperation
 		{
 			private readonly PersistentGenericMap<TKey, TValue> _enclosingInstance;
@@ -567,5 +595,85 @@ namespace NHibernate.Collection.Generic
 		}
 
 		#endregion
+
+		[Serializable]
+		private class ValuesWrapper : ICollection<TValue>, IQueryable<TValue>
+		{
+			private readonly PersistentGenericMap<TKey, TValue> _map;
+
+			public ValuesWrapper(PersistentGenericMap<TKey, TValue> map)
+			{
+				_map = map;
+			}
+
+			#region IQueryable<TValue> Members
+
+			[NonSerialized]
+			private IQueryable<TValue> _queryable;
+
+			Expression IQueryable.Expression => InnerQueryable.Expression;
+
+			System.Type IQueryable.ElementType => InnerQueryable.ElementType;
+
+			IQueryProvider IQueryable.Provider => InnerQueryable.Provider;
+
+			private IQueryable<TValue> InnerQueryable => _queryable ?? (_queryable = new NhQueryable<TValue>(_map.Session, _map));
+
+			#endregion
+
+			#region ICollection<TValue> Members
+
+			public IEnumerator<TValue> GetEnumerator()
+			{
+				_map.Read();
+				return _map.WrappedMap.Values.GetEnumerator();
+			}
+
+			IEnumerator IEnumerable.GetEnumerator()
+			{
+				_map.Read();
+				return GetEnumerator();
+			}
+
+			public void Add(TValue item)
+			{
+				throw new NotSupportedException("Values collection is readonly");
+			}
+
+			public void Clear()
+			{
+				throw new NotSupportedException("Values collection is readonly");
+			}
+
+			public bool Contains(TValue item)
+			{
+				_map.Read();
+				return _map.WrappedMap.Values.Contains(item);
+			}
+
+			public void CopyTo(TValue[] array, int arrayIndex)
+			{
+				_map.Read();
+				_map.WrappedMap.Values.CopyTo(array, arrayIndex);
+			}
+
+			public bool Remove(TValue item)
+			{
+				throw new NotSupportedException("Values collection is readonly");
+			}
+
+			public int Count
+			{
+				get
+				{
+					_map.Read();
+					return _map.WrappedMap.Values.Count;
+				}
+			}
+
+			public bool IsReadOnly => true;
+
+			#endregion
+		}
 	}
 }

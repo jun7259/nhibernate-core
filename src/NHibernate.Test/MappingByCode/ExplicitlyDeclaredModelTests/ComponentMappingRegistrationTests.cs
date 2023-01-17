@@ -3,11 +3,11 @@ using NUnit.Framework;
 
 namespace NHibernate.Test.MappingByCode.ExplicitlyDeclaredModelTests
 {
+	[TestFixture]
 	public class ComponentMappingRegistrationTests
 	{
 		private class MyComponent
 		{
-			
 		}
 
 		[Test]

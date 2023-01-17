@@ -5,7 +5,9 @@ using NHibernate.Cache.Access;
 using NHibernate.Collection;
 using NHibernate.Engine;
 using NHibernate.Impl;
+using NHibernate.Persister;
 using NHibernate.Persister.Collection;
+using NHibernate.Persister.Entity;
 using NHibernate.Util;
 
 namespace NHibernate.Action
@@ -14,10 +16,14 @@ namespace NHibernate.Action
 	/// Any action relating to insert/update/delete of a collection
 	/// </summary>
 	[Serializable]
-	public abstract class CollectionAction : IExecutable, IComparable<CollectionAction>, IDeserializationCallback
+	public abstract partial class CollectionAction : 
+		IAsyncExecutable, 
+		IComparable<CollectionAction>, 
+		IDeserializationCallback, 
+		IAfterTransactionCompletionProcess, 
+		ICacheableExecutable
 	{
 		private readonly object key;
-		private object finalKey;
 		[NonSerialized] private ICollectionPersister persister;
 		private readonly ISessionImplementor session;
 		private readonly string collectionRole;
@@ -51,23 +57,26 @@ namespace NHibernate.Action
 			get { return persister; }
 		}
 
-		protected internal object Key
+		//Since v5.3
+		[Obsolete("Please use GetKey() instead.")]
+		protected internal object Key => GetKey();
+
+		protected object GetKey()
 		{
-			get
+			if (key is DelayedPostInsertIdentifier)
 			{
-				finalKey = key;
-				if (key is DelayedPostInsertIdentifier)
+				// need to look it up
+				var finalKey = persister.CollectionType.GetKeyOfOwner(collection.Owner, session);
+				if (finalKey == key)
 				{
-					// need to look it up from the persistence-context
-					finalKey = session.PersistenceContext.GetEntry(collection.Owner).Id;
-					if (finalKey == key)
-					{
-						// we may be screwed here since the collection action is about to execute
-						// and we do not know the final owner key value
-					}
+					// we may be screwed here since the collection action is about to execute
+					// and we do not know the final owner key value
 				}
+
 				return finalKey;
 			}
+
+			return key;
 		}
 
 		protected internal ISessionImplementor Session
@@ -76,6 +85,15 @@ namespace NHibernate.Action
 		}
 
 		#region IExecutable Members
+
+		public string[] QueryCacheSpaces
+		{
+			get
+			{
+				// 6.0 TODO: Use IPersister.SupportsQueryCache property once IPersister's todo is done.
+				return persister.SupportsQueryCache() ? persister.CollectionSpaces : null;
+			}
+		}
 
 		/// <summary>
 		/// What spaces (tables) are affected by this action?
@@ -104,29 +122,28 @@ namespace NHibernate.Action
 		/// <summary>Execute this action</summary>
 		public abstract void Execute();
 
-		public virtual BeforeTransactionCompletionProcessDelegate BeforeTransactionCompletionProcess
+		IBeforeTransactionCompletionProcess IAsyncExecutable.BeforeTransactionCompletionProcess => 
+			null;
+
+		IAfterTransactionCompletionProcess IAsyncExecutable.AfterTransactionCompletionProcess =>
+			persister.HasCache ? this : null;
+
+		//Since v5.2
+		[Obsolete("This property is not used and will be removed in a future version.")]
+		public virtual BeforeTransactionCompletionProcessDelegate BeforeTransactionCompletionProcess => 
+			null;
+
+		//Since v5.2
+		[Obsolete("This property is not used and will be removed in a future version.")]
+		public virtual AfterTransactionCompletionProcessDelegate AfterTransactionCompletionProcess =>
+			persister.HasCache ? ExecuteAfterTransactionCompletion : default(AfterTransactionCompletionProcessDelegate);
+
+		public virtual void ExecuteAfterTransactionCompletion(bool success)
 		{
-			get 
-			{ 
-				return null; 
-			}
+			var ck = session.GenerateCacheKey(key, persister.KeyType, persister.Role);
+			persister.Cache.Release(ck, softLock);
 		}
 
-		public virtual AfterTransactionCompletionProcessDelegate AfterTransactionCompletionProcess
-		{
-			get
-			{
-				return new AfterTransactionCompletionProcessDelegate((success) =>
-				{
-					if (persister.HasCache)
-					{
-						CacheKey ck = Session.GenerateCacheKey(key, persister.KeyType, persister.Role);
-						persister.Cache.Release(ck, softLock);
-					}
-				});
-			}
-		}
-		
 		#endregion
 
 		public ISoftLock Lock
@@ -161,7 +178,7 @@ namespace NHibernate.Action
 				return roleComparison;
 			}
 			//then by fk
-			return persister.KeyType.Compare(key, other.key, session.EntityMode);
+			return persister.KeyType.Compare(key, other.key);
 		}
 
 		#endregion

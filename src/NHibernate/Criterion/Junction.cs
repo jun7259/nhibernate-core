@@ -1,12 +1,10 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using NHibernate.Engine;
 using NHibernate.Impl;
 using NHibernate.SqlCommand;
-using NHibernate.Util;
-using System.Linq;
 
 namespace NHibernate.Criterion
 {
@@ -17,7 +15,7 @@ namespace NHibernate.Criterion
 	[Serializable]
 	public abstract class Junction : AbstractCriterion
 	{
-		private readonly IList<ICriterion> criteria = new List<ICriterion>();
+		private readonly List<ICriterion> criteria = new List<ICriterion>();
 
 		/// <summary>
 		/// Adds an <see cref="ICriterion"/> to the list of <see cref="ICriterion"/>s
@@ -79,7 +77,7 @@ namespace NHibernate.Criterion
 		/// </summary>
 		protected abstract SqlString EmptyExpression { get; }
 
-		public override SqlString ToSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery, IDictionary<string, IFilter> enabledFilters)
+		public override SqlString ToSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery)
 		{
 			if (this.criteria.Count == 0)
 			{
@@ -93,12 +91,11 @@ namespace NHibernate.Criterion
 
 			for (int i = 0; i < this.criteria.Count - 1; i++)
 			{
-				sqlBuilder.Add(this.criteria[i].ToSqlString(criteria, criteriaQuery, enabledFilters));
+				sqlBuilder.Add(this.criteria[i].ToSqlString(criteria, criteriaQuery));
 				sqlBuilder.Add(Op);
 			}
 
-			sqlBuilder.Add(this.criteria[this.criteria.Count - 1].ToSqlString(criteria, criteriaQuery, enabledFilters));
-
+			sqlBuilder.Add(this.criteria[this.criteria.Count - 1].ToSqlString(criteria, criteriaQuery));
 
 			sqlBuilder.Add(")");
 
@@ -107,14 +104,14 @@ namespace NHibernate.Criterion
 
 		public override string ToString()
 		{
-			return '(' + StringHelper.Join(Op, criteria) + ')';
+			return '(' + string.Join(Op, criteria) + ')';
 		}
 
-        public override string ToHqlString()
-        {
-            var xx = from x in criteria select x.ToHqlString();
-            return '(' + StringHelper.Join(Op, xx) + ')';
-        }
+		public override string ToHqlString()
+		{
+			var xx = from x in criteria select x.ToHqlString();
+			return '(' + string.Join(Op, xx) + ')';
+		}
 
 		public override IProjection[] GetProjections()
 		{

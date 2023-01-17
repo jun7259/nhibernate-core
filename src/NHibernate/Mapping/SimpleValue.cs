@@ -1,6 +1,6 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using NHibernate.Engine;
 using NHibernate.Id;
@@ -37,10 +37,7 @@ namespace NHibernate.Mapping
 			this.table = table;
 		}
 
-		public virtual IEnumerable<Column> ConstraintColumns
-		{
-			get { return new SafetyEnumerable<Column>(columns); }
-		}
+		public virtual IEnumerable<Column> ConstraintColumns => columns.OfType<Column>();
 
 		public string ForeignKeyName
 		{
@@ -73,9 +70,9 @@ namespace NHibernate.Mapping
 
 		#region IKeyValue Members
 
-		public void CreateForeignKeyOfEntity(string entityName)
+		public virtual void CreateForeignKeyOfEntity(string entityName)
 		{
-			if (!HasFormula && ! "none".Equals(ForeignKeyName, StringComparison.InvariantCultureIgnoreCase))
+			if (!HasFormula && ! "none".Equals(ForeignKeyName, StringComparison.OrdinalIgnoreCase))
 			{
 				ForeignKey fk = table.CreateForeignKey(ForeignKeyName, ConstraintColumns, entityName);
 				fk.CascadeDeleteEnabled = cascadeDeleteEnabled;
@@ -168,9 +165,7 @@ namespace NHibernate.Mapping
 			@params[PersistentIdGeneratorParmsNames.Table] = tableName;
 
 			//pass the column name (a generated id almost always has a single column and is not a formula)
-			IEnumerator enu = ColumnIterator.GetEnumerator();
-			enu.MoveNext();
-			string columnName = ((Column)enu.Current).GetQuotedName(dialect);
+			string columnName = ((Column)ColumnIterator.First()).GetQuotedName(dialect);
 
 			@params[PersistentIdGeneratorParmsNames.PK] = columnName;
 
@@ -263,6 +258,10 @@ namespace NHibernate.Mapping
 				{
 					result = TypeFactory.BuiltInType(typeName, Convert.ToByte(col.Precision), Convert.ToByte(col.Scale));
 				}
+				else if (col.IsScaleDefined())
+				{
+					result = TypeFactory.BuiltInType(typeName, col.Scale);
+				}
 			}
 			return result ?? TypeFactory.HeuristicType(typeName, typeParameters);
 		}
@@ -322,7 +321,7 @@ namespace NHibernate.Mapping
 
 		public virtual bool IsValid(IMapping mapping)
 		{
-			return ColumnSpan == Type.GetColumnSpan(mapping);
+			return ColumnSpan == Type.GetOwnerColumnSpan(mapping);
 		}
 
 		public virtual void CreateForeignKey()

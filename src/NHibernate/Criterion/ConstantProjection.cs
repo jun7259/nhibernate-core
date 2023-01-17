@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using NHibernate.Engine;
 using NHibernate.SqlCommand;
@@ -14,7 +13,7 @@ namespace NHibernate.Criterion
 	public class ConstantProjection : SimpleProjection
 	{
 		private readonly object value;
-		private readonly TypedValue typedValue;
+		public TypedValue TypedValue { get; }
 
 		public ConstantProjection(object value) : this(value, NHibernateUtil.GuessType(value.GetType()))
 		{
@@ -23,7 +22,7 @@ namespace NHibernate.Criterion
 		public ConstantProjection(object value, IType type)
 		{
 			this.value = value;
-			typedValue = new TypedValue(type, this.value, EntityMode.Poco);
+			TypedValue = new TypedValue(type, this.value);
 		}
 
 		public override bool IsAggregate
@@ -31,7 +30,7 @@ namespace NHibernate.Criterion
 			get { return false; }
 		}
 
-		public override SqlString ToGroupSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery, IDictionary<string, IFilter> enabledFilters)
+		public override SqlString ToGroupSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery)
 		{
 			throw new InvalidOperationException("not a grouping projection");
 		}
@@ -41,22 +40,22 @@ namespace NHibernate.Criterion
 			get { return false; }
 		}
 
-		public override SqlString ToSqlString(ICriteria criteria, int position, ICriteriaQuery criteriaQuery, IDictionary<string, IFilter> enabledFilters)
+		public override SqlString ToSqlString(ICriteria criteria, int position, ICriteriaQuery criteriaQuery)
 		{
 			return new SqlString(
-				criteriaQuery.NewQueryParameter(typedValue).Single(),
+				criteriaQuery.NewQueryParameter(TypedValue).Single(),
 				" as ",
-				GetColumnAliases(position, criteria, criteriaQuery)[0]);
+				GetColumnAlias(position));
 		}
 
 		public override IType[] GetTypes(ICriteria criteria, ICriteriaQuery criteriaQuery)
 		{
-			return new IType[] { typedValue.Type };
+			return new IType[] { TypedValue.Type };
 		}
 
 		public override TypedValue[] GetTypedValues(ICriteria criteria, ICriteriaQuery criteriaQuery)
 		{
-			return new TypedValue[] { typedValue };
+			return new TypedValue[] { TypedValue };
 		}
 	}
 }

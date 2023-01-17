@@ -14,6 +14,7 @@ namespace NHibernate.Test.DriverTest
 		public virtual TimeSpan TimeSpanProp { get; set; }
 	}
 
+	[TestFixture]
 	public class Sql2008DateTime2Test : TestCase
 	{
 		protected override void Configure(Configuration configuration)
@@ -25,7 +26,7 @@ namespace NHibernate.Test.DriverTest
 			get { return "NHibernate.Test"; }
 		}
 
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get { return new[] { "DriverTest.EntityForMs2008.hbm.xml" }; }
 		}
@@ -68,6 +69,5 @@ namespace NHibernate.Test.DriverTest
 				t.Commit();
 			}
 		}
-
 	}
 }

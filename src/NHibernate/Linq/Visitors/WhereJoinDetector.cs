@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using NHibernate.Engine;
 using NHibernate.Linq.ReWriters;
 using Remotion.Linq.Clauses;
 using Remotion.Linq.Clauses.Expressions;
@@ -31,10 +32,10 @@ namespace NHibernate.Linq.Visitors
 	/// For example:
 	/// a.B.C == 1 could never produce true if B didn't match any rows, so it's safe to inner join.
 	/// a.B.C == null could produce true even if B didn't match any rows, so we can't inner join.
-	/// a.B.C == 1 && a.D.E == 1 can be inner joined.
+	/// a.B.C == 1 &amp;&amp; a.D.E == 1 can be inner joined.
 	/// a.B.C == 1 || a.D.E == 1 must be outer joined.
 	/// 
-	/// By default we outer join via the code in VisitExpression.  The use of inner joins is only
+	/// By default we outer join via the code in Visit.  The use of inner joins is only
 	/// an optimization hint to the database.
 	/// 
 	/// More examples:
@@ -56,11 +57,12 @@ namespace NHibernate.Linq.Visitors
 	/// 
 	/// The code here is based on the excellent work started by Harald Mueller.
 	/// </summary>
-	internal class WhereJoinDetector : ExpressionTreeVisitor
+	internal class WhereJoinDetector : RelinqExpressionVisitor
 	{
 		// TODO: There are a number of types of expressions that we didn't handle here due to time constraints.  For example, the ?: operator could be checked easily.
 		private readonly IIsEntityDecider _isEntityDecider;
 		private readonly IJoiner _joiner;
+		private readonly ISessionFactoryImplementor _sessionFactory;
 
 		private readonly Stack<bool> _handled = new Stack<bool>();
 		
@@ -70,16 +72,28 @@ namespace NHibernate.Linq.Visitors
 		// The following is used for member expressions traversal.
 		private int _memberExpressionDepth;
 
-		internal WhereJoinDetector(IIsEntityDecider isEntityDecider, IJoiner joiner)
+		internal WhereJoinDetector(IIsEntityDecider isEntityDecider, IJoiner joiner, ISessionFactoryImplementor sessionFactory)
 		{
 			_isEntityDecider = isEntityDecider;
 			_joiner = joiner;
+			_sessionFactory = sessionFactory;
 		}
 
-		public void Transform(WhereClause whereClause)
+		public Expression Transform(Expression expression)
 		{
-			whereClause.TransformExpressions(VisitExpression);
+			var result = Visit(expression);
+			PostTransform();
+			return result;
+		}
 
+		public void Transform(IClause whereClause)
+		{
+			whereClause.TransformExpressions(Visit);
+			PostTransform();
+		}
+
+		private void PostTransform()
+		{
 			var values = _values.Pop();
 
 			foreach (var memberExpression in values.MemberExpressions)
@@ -92,7 +106,7 @@ namespace NHibernate.Linq.Visitors
 			}
 		}
 
-		public override Expression VisitExpression(Expression expression)
+		public override Expression Visit(Expression expression)
 		{
 			if (expression == null)
 				return null;
@@ -104,7 +118,7 @@ namespace NHibernate.Linq.Visitors
 			_handled.Push(false);
 			int originalCount = _values.Count;
 
-			Expression result = base.VisitExpression(expression);
+			Expression result = base.Visit(expression);
 
 			if (!_handled.Pop())
 			{
@@ -119,9 +133,9 @@ namespace NHibernate.Linq.Visitors
 			return result;
 		}
 
-		protected override Expression VisitBinaryExpression(BinaryExpression expression)
+		protected override Expression VisitBinary(BinaryExpression expression)
 		{
-			var result = base.VisitBinaryExpression(expression);
+			var result = base.VisitBinary(expression);
 
 			if (expression.NodeType == ExpressionType.AndAlso)
 			{
@@ -239,9 +253,9 @@ namespace NHibernate.Linq.Visitors
 			return result;
 		}
 
-		protected override Expression VisitUnaryExpression(UnaryExpression expression)
+		protected override Expression VisitUnary(UnaryExpression expression)
 		{
-			Expression result = base.VisitUnaryExpression(expression);
+			Expression result = base.VisitUnary(expression);
 
 			if (expression.NodeType == ExpressionType.Not && expression.Type == typeof(bool))
 			{
@@ -271,22 +285,22 @@ namespace NHibernate.Linq.Visitors
 			return result;
 		}
 
-		protected override Expression VisitSubQueryExpression(SubQueryExpression expression)
+		protected override Expression VisitSubQuery(SubQueryExpression expression)
 		{
-			expression.QueryModel.TransformExpressions(VisitExpression);
+			expression.QueryModel.TransformExpressions(Visit);
 			return expression;
 		}
 
-		// We would usually get NULL if one of our inner member expresions was null.
+		// We would usually get NULL if one of our inner member expressions was null.
 		// However, it's possible a method call will convert the null value from the failed join into a non-null value.
 		// This could be optimized by actually checking what the method does.  For example StartsWith("s") would leave null as null and would still allow us to inner join.
-		//protected override Expression VisitMethodCallExpression(MethodCallExpression expression)
+		//protected override Expression VisitMethodCall(MethodCallExpression expression)
 		//{
-		//    Expression result = base.VisitMethodCallExpression(expression);
+		//    Expression result = base.VisitMethodCall(expression);
 		//    return result;
 		//}
 
-		protected override Expression VisitMemberExpression(MemberExpression expression)
+		protected override Expression VisitMember(MemberExpression expression)
 		{
 			// The member expression we're visiting might be on the end of a variety of things, such as:
 			//   a.B
@@ -295,22 +309,29 @@ namespace NHibernate.Linq.Visitors
 			// I'm not sure what processing re-linq does to strange member expressions.
 			// TODO: I suspect this code doesn't add the right joins for the last case.
 
-			var isIdentifier = _isEntityDecider.IsIdentifier(expression.Expression.Type, expression.Member.Name);
+			// A static member expression such as DateTime.Now has a null Expression.
+			if (expression.Expression == null)
+			{
+				// A static member call is never a join, and it is not an instance member access either: leave
+				// the current value on stack, untouched.
+				return base.VisitMember(expression);
+			}
 
+			var isEntity = _isEntityDecider.IsEntity(expression, out var isIdentifier);
 			if (!isIdentifier)
 				_memberExpressionDepth++;
 
-			var result = base.VisitMemberExpression(expression);
+			var result = base.VisitMember(expression);
 
 			if (!isIdentifier)
 				_memberExpressionDepth--;
 
 			ExpressionValues values = _values.Pop().Operation(pvs => pvs.MemberAccess(expression.Type));
-			if (_isEntityDecider.IsEntity(expression.Type))
+			if (isEntity)
 			{
 				// Don't add joins for things like a.B == a.C where B and C are entities.
 				// We only need to join B when there's something like a.B.D.
-				var key = ExpressionKeyVisitor.Visit(expression, null);
+				var key = ExpressionKeyVisitor.Visit(expression, null, _sessionFactory);
 				if (_memberExpressionDepth > 0 &&
 					_joiner.CanAddJoin(expression))
 				{
@@ -320,7 +341,15 @@ namespace NHibernate.Linq.Visitors
 				values.MemberExpressionValuesIfEmptyOuterJoined[key] = PossibleValueSet.CreateNull(expression.Type);
 			}
 			SetResultValues(values);
-			
+
+			return result;
+		}
+
+		protected override Expression VisitMethodCall(MethodCallExpression node)
+		{
+			_memberExpressionDepth++;
+			var result = base.VisitMethodCall(node);
+			_memberExpressionDepth--;
 			return result;
 		}
 
@@ -362,7 +391,7 @@ namespace NHibernate.Linq.Visitors
 			/// Stores the possible values of an expression that would result if the given member expression
 			/// string was emptily outer joined.  For example a.B.C would result in "null" if we try to
 			/// outer join to B and there are no rows.  Even if an expression tree does contain a particular
-			/// member experssion, it may not appear in this list.  In that case, the emptily outer joined
+			/// member expression, it may not appear in this list.  In that case, the emptily outer joined
 			/// value set for that member expression will be whatever's in Values instead.
 			/// </summary>
 			public Dictionary<string, PossibleValueSet> MemberExpressionValuesIfEmptyOuterJoined { get; private set; }

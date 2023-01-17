@@ -5,13 +5,13 @@ using NUnit.Framework;
 
 namespace NHibernate.Test.NHSpecificTest.ProxyValidator
 {
+	[TestFixture]
 	public class ShouldBeProxiableTests
 	{
 		private class MyClass: IDisposable
 		{
 			public void Dispose()
 			{
-				
 			}
 		}
 		private class ProtectedNoVirtualProperty

@@ -5,7 +5,6 @@ namespace NHibernate.Criterion
 	using Engine;
 	using SqlCommand;
 	using Type;
-	using Util;
 
 	public static class CriterionUtil
 	{
@@ -13,13 +12,12 @@ namespace NHibernate.Criterion
 			string propertyName,
 			IProjection projection,
 			ICriteriaQuery criteriaQuery,
-			ICriteria criteria,
-			IDictionary<string, IFilter> enabledFilters)
+			ICriteria criteria)
 		{
 			if (projection == null)
 				return GetColumnNamesUsingPropertyName(criteriaQuery, criteria, propertyName);
 			else
-				return GetColumnNamesUsingProjection(projection, criteriaQuery, criteria, enabledFilters);
+				return GetColumnNamesUsingProjection(projection, criteriaQuery, criteria);
 		}
 
 		public static SqlString[] GetColumnNamesForSimpleExpression(
@@ -27,7 +25,6 @@ namespace NHibernate.Criterion
 			IProjection projection,
 			ICriteriaQuery criteriaQuery,
 			ICriteria criteria,
-			IDictionary<string, IFilter> enabledFilters,
 			ICriterion criterion,
 			object value)
 		{
@@ -42,21 +39,64 @@ namespace NHibernate.Criterion
 			}
 			else
 			{
-				return GetColumnNamesUsingProjection(projection, criteriaQuery, criteria, enabledFilters);
+				return GetColumnNamesUsingProjection(projection, criteriaQuery, criteria);
 			}
 		}
 
-		internal static SqlString[] GetColumnNamesUsingProjection(IProjection projection, ICriteriaQuery criteriaQuery, ICriteria criteria,
-																	 IDictionary<string, IFilter> enabledFilters)
+		internal static SqlString[] GetColumnNamesUsingProjection(IProjection projection, ICriteriaQuery criteriaQuery, ICriteria criteria)
 		{
-			SqlString sqlString = projection.ToSqlString(criteria, 
-				criteriaQuery.GetIndexForAlias(),
-				criteriaQuery, 
-				enabledFilters);
-			return new SqlString[]
-				{
-					SqlStringHelper.RemoveAsAliasesFromSql(sqlString)
-				};
+			if (projection is IPropertyProjection propertyProjection)
+			{
+				return GetColumnNamesUsingPropertyName(criteriaQuery, criteria, propertyProjection.PropertyName);
+			}
+
+			return GetProjectionColumns(projection, criteriaQuery, criteria);
+		}
+
+		internal static object[] GetColumnNamesAsSqlStringParts(string propertyName, IProjection projection, ICriteriaQuery criteriaQuery, ICriteria criteria)
+		{
+			if (propertyName != null)
+				return criteriaQuery.GetColumnsUsingProjection(criteria, propertyName);
+			
+			return GetColumnNamesAsSqlStringParts(projection, criteriaQuery, criteria);
+		}
+
+		internal static object[] GetColumnNamesAsSqlStringParts(IProjection projection, ICriteriaQuery criteriaQuery, ICriteria criteria)
+		{
+			if (projection is IPropertyProjection propertyProjection)
+			{
+				return criteriaQuery.GetColumnsUsingProjection(criteria, propertyProjection.PropertyName);
+			}
+
+			return GetProjectionColumns(projection, criteriaQuery, criteria);
+		}
+
+		internal static object GetColumnNameAsSqlStringPart(string propertyName, IProjection projection, ICriteriaQuery criteriaQuery, ICriteria criteria)
+		{
+			var columnNames = GetColumnNamesAsSqlStringParts(propertyName, projection, criteriaQuery, criteria);
+			if (columnNames.Length != 1)
+			{
+				throw new QueryException("property or projection does not map to a single column: " + (propertyName ?? projection.ToString()));
+			}
+
+			return columnNames[0];
+		}
+
+		internal static object GetColumnNameAsSqlStringPart(IProjection projection, ICriteriaQuery criteriaQuery, ICriteria criteria)
+		{
+			var columnNames = GetColumnNamesAsSqlStringParts(projection, criteriaQuery, criteria);
+			if (columnNames.Length != 1)
+			{
+				throw new QueryException("property or projection does not map to a single column: " + (projection.ToString()));
+			}
+
+			return columnNames[0];
+		}
+
+		private static SqlString[] GetProjectionColumns(IProjection projection, ICriteriaQuery criteriaQuery, ICriteria criteria)
+		{
+			var sqlString = projection.ToSqlString(criteria, criteriaQuery.GetIndexForAlias(), criteriaQuery);
+			return new[] {SqlStringHelper.RemoveAsAliasesFromSql(sqlString)};
 		}
 
 		private static SqlString[] GetColumnNamesUsingPropertyName(ICriteriaQuery criteriaQuery, ICriteria criteria, string propertyName)
@@ -115,11 +155,23 @@ namespace NHibernate.Criterion
 			{
 				foreach (object value in values)
 				{
-					types.Add(new TypedValue(NHibernateUtil.GuessType((object)value), value, EntityMode.Poco));
+					types.Add(new TypedValue(NHibernateUtil.GuessType((object)value), value));
 				}
 			}
 			return types.ToArray();
+		}
 
+		public static TypedValue GetTypedValue(
+			ICriteriaQuery criteriaQuery,
+			ICriteria criteria,
+			IProjection projection,
+			string propertyName,
+			object value)
+		{
+			if (propertyName != null || (propertyName = (projection as IPropertyProjection)?.PropertyName) != null)
+				return criteriaQuery.GetTypedValue(criteria, propertyName, value);
+
+			return new TypedValue(NHibernateUtil.GuessType(value), value);
 		}
 	}
 }

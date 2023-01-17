@@ -9,8 +9,11 @@ namespace NHibernate.Test.NHSpecificTest.NH1171
 	{
 		protected override bool AppliesTo(Dialect.Dialect dialect)
 		{
-			// Firebird has issues with comments containing apostrophes
-			return !(dialect is FirebirdDialect);
+			return
+				// Firebird has issues with comments containing apostrophes
+				!(dialect is FirebirdDialect)
+				// GH-2853: Oracle client bug: throws Oracle.ManagedDataAccess.Client.OracleException : ORA-01008: not all variables bound
+				&& !(dialect is Oracle8iDialect);
 		}
 
 		protected override void Configure(NHibernate.Cfg.Configuration configuration)
@@ -59,8 +62,8 @@ ORDER BY Name
 					q.List();
 				}
 				string message = ls.GetWholeLog();
-				Assert.That(message, Is.StringContaining("-- Comment with ' number 1"));
-				Assert.That(message, Is.StringContaining("/* Comment with ' number 2 */"));
+				Assert.That(message, Does.Contain("-- Comment with ' number 1"));
+				Assert.That(message, Does.Contain("/* Comment with ' number 2 */"));
 			}
 		}
 	}

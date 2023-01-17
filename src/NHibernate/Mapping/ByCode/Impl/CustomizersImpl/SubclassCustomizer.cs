@@ -4,7 +4,7 @@ using NHibernate.Persister.Entity;
 
 namespace NHibernate.Mapping.ByCode.Impl.CustomizersImpl
 {
-	public class SubclassCustomizer<TEntity> : PropertyContainerCustomizer<TEntity>, ISubclassMapper<TEntity>, IConformistHoldersProvider where TEntity : class
+	public class SubclassCustomizer<TEntity> : PropertyContainerCustomizer<TEntity>, ISubclassMapper<TEntity>, IConformistHoldersProvider, IEntitySqlsWithCheckMapper where TEntity : class
 	{
 		private Dictionary<string, IJoinMapper<TEntity>> joinCustomizers;
 
@@ -22,6 +22,20 @@ namespace NHibernate.Mapping.ByCode.Impl.CustomizersImpl
 		}
 
 		#region ISubclassMapper<TEntity> Members
+		public void Extends(System.Type baseType)
+		{
+			CustomizersHolder.AddCustomizer(typeof(TEntity), (ISubclassMapper m) => m.Extends(baseType));
+		}
+
+		public void Extends(string entityOrClassName)
+		{
+			CustomizersHolder.AddCustomizer(typeof(TEntity), (ISubclassMapper m) => m.Extends(entityOrClassName));
+		}
+
+		public void Abstract(bool isAbstract)
+		{
+			CustomizersHolder.AddCustomizer(typeof(TEntity), (ISubclassMapper m) => m.Abstract(isAbstract));
+		}
 
 		public void DiscriminatorValue(object value)
 		{
@@ -115,14 +129,29 @@ namespace NHibernate.Mapping.ByCode.Impl.CustomizersImpl
 			CustomizersHolder.AddCustomizer(typeof (TEntity), (ISubclassMapper m) => m.SqlInsert(sql));
 		}
 
+		public void SqlInsert(string sql, SqlCheck sqlCheck)
+		{
+			CustomizersHolder.AddCustomizer(typeof(TEntity), (ISubclassMapper m) => m.SqlInsert(sql, sqlCheck));
+		}
+
 		public void SqlUpdate(string sql)
 		{
 			CustomizersHolder.AddCustomizer(typeof (TEntity), (ISubclassMapper m) => m.SqlUpdate(sql));
 		}
 
+		public void SqlUpdate(string sql, SqlCheck sqlCheck)
+		{
+			CustomizersHolder.AddCustomizer(typeof(TEntity), (ISubclassMapper m) => m.SqlUpdate(sql, sqlCheck));
+		}
+
 		public void SqlDelete(string sql)
 		{
 			CustomizersHolder.AddCustomizer(typeof (TEntity), (ISubclassMapper m) => m.SqlDelete(sql));
+		}
+
+		public void SqlDelete(string sql, SqlCheck sqlCheck)
+		{
+			CustomizersHolder.AddCustomizer(typeof(TEntity), (ISubclassMapper m) => m.SqlDelete(sql, sqlCheck));
 		}
 
 		public void Subselect(string sql)

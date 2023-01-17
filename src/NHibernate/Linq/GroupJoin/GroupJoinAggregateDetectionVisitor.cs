@@ -8,7 +8,7 @@ using Remotion.Linq.Clauses.Expressions;
 
 namespace NHibernate.Linq.GroupJoin
 {
-	internal class GroupJoinAggregateDetectionVisitor : NhExpressionTreeVisitor
+	internal class GroupJoinAggregateDetectionVisitor : NhExpressionVisitor
 	{
 		private readonly HashSet<GroupJoinClause> _groupJoinClauses;
 		private readonly StackFlag _inAggregate = new StackFlag();
@@ -18,7 +18,7 @@ namespace NHibernate.Linq.GroupJoin
 		private readonly List<GroupJoinClause> _nonAggregatingGroupJoins = new List<GroupJoinClause>();
 		private readonly List<GroupJoinClause> _aggregatingGroupJoins = new List<GroupJoinClause>();
 
-		private GroupJoinAggregateDetectionVisitor(IEnumerable<GroupJoinClause> groupJoinClause)
+		internal GroupJoinAggregateDetectionVisitor(IEnumerable<GroupJoinClause> groupJoinClause)
 		{
 			_groupJoinClauses = new HashSet<GroupJoinClause>(groupJoinClause);
 		}
@@ -27,26 +27,26 @@ namespace NHibernate.Linq.GroupJoin
 		{
 			var visitor = new GroupJoinAggregateDetectionVisitor(groupJoinClause);
 
-			visitor.VisitExpression(selectExpression);
+			visitor.Visit(selectExpression);
 
-			return new IsAggregatingResults { NonAggregatingClauses = visitor._nonAggregatingGroupJoins, AggregatingClauses = visitor._aggregatingGroupJoins, NonAggregatingExpressions = visitor._nonAggregatingExpressions };
+			return GetResults(visitor);
 		}
 
-		protected override Expression VisitSubQueryExpression(SubQueryExpression expression)
+		protected override Expression VisitSubQuery(SubQueryExpression expression)
 		{
-			VisitExpression(expression.QueryModel.SelectClause.Selector);
+			Visit(expression.QueryModel.SelectClause.Selector);
 			return expression;
 		}
 
-		protected override Expression VisitNhAggregate(NhAggregatedExpression expression)
+		protected internal override Expression VisitNhAggregated(NhAggregatedExpression expression)
 		{
 			using (_inAggregate.SetFlag())
 			{
-				return base.VisitNhAggregate(expression);
+				return base.VisitNhAggregated(expression);
 			}
 		}
 
-		protected override Expression VisitMemberExpression(MemberExpression expression)
+		protected override Expression VisitMember(MemberExpression expression)
 		{
 			if (_inAggregate.FlagIsFalse && _parentExpressionProcessed.FlagIsFalse)
 			{
@@ -55,19 +55,19 @@ namespace NHibernate.Linq.GroupJoin
 
 			using (_parentExpressionProcessed.SetFlag())
 			{
-				return base.VisitMemberExpression(expression);
+				return base.VisitMember(expression);
 			}
 		}
 
-		protected override Expression VisitQuerySourceReferenceExpression(QuerySourceReferenceExpression expression)
+		protected override Expression VisitQuerySourceReference(QuerySourceReferenceExpression expression)
 		{
-			var fromClause = (FromClauseBase) expression.ReferencedQuerySource;
-
-			var querySourceReference = fromClause.FromExpression as QuerySourceReferenceExpression;
-			if (querySourceReference != null)
+			if (!(expression.ReferencedQuerySource is FromClauseBase fromClause))
 			{
-				var groupJoinClause = querySourceReference.ReferencedQuerySource as GroupJoinClause;
-				if (groupJoinClause != null && _groupJoinClauses.Contains(groupJoinClause))
+			}
+			else if (fromClause.FromExpression is QuerySourceReferenceExpression querySourceReference)
+			{
+				if (querySourceReference.ReferencedQuerySource is GroupJoinClause groupJoinClause &&
+				    _groupJoinClauses.Contains(groupJoinClause))
 				{
 					if (_inAggregate.FlagIsFalse)
 					{
@@ -79,8 +79,29 @@ namespace NHibernate.Linq.GroupJoin
 					}
 				}
 			}
+			// In order to detect a left join (e.g. from a in A join b in B on a.Id equals b.Id into c from b in c.DefaultIfEmpty())
+			// we have to visit the subquery in order to find the group join
+			else if (fromClause.FromExpression is SubQueryExpression subQuery)
+			{
+				VisitSubQuery(subQuery);
+			}
 
-			return base.VisitQuerySourceReferenceExpression(expression);
+			return base.VisitQuerySourceReference(expression);
+		}
+
+		internal IsAggregatingResults GetResults()
+		{
+			return GetResults(this);
+		}
+
+		private static IsAggregatingResults GetResults(GroupJoinAggregateDetectionVisitor visitor)
+		{
+			return new IsAggregatingResults
+			{
+				NonAggregatingClauses = visitor._nonAggregatingGroupJoins,
+				AggregatingClauses = visitor._aggregatingGroupJoins,
+				NonAggregatingExpressions = visitor._nonAggregatingExpressions
+			};
 		}
 
 		internal class StackFlag

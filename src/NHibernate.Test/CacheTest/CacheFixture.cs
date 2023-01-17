@@ -8,22 +8,22 @@ using NUnit.Framework;
 namespace NHibernate.Test.CacheTest
 {
 	[TestFixture]
-	public class CacheFixture
+	public class CacheFixture: TestCase
 	{
 		[Test]
-		public void TestSimpleCache()
+		public void TestSimpleReadWriteCache()
 		{
 			DoTestCache(new HashtableCacheProvider());
 		}
 
-		private CacheKey CreateCacheKey(string text)
+		protected CacheKey CreateCacheKey(string text)
 		{
-			return new CacheKey(text, NHibernateUtil.String, "Foo", EntityMode.Poco, null);
+			return new CacheKey(text, NHibernateUtil.String, "Foo", null, null);
 		}
 
 		public void DoTestCache(ICacheProvider cacheProvider)
 		{
-			ICache cache = cacheProvider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
+			var cache = (CacheBase) cacheProvider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
 
 			long longBefore = Timestamper.Next();
 
@@ -33,8 +33,7 @@ namespace NHibernate.Test.CacheTest
 
 			Thread.Sleep(15);
 
-			ICacheConcurrencyStrategy ccs = new ReadWriteCache();
-			ccs.Cache = cache;
+			ICacheConcurrencyStrategy ccs = CreateCache(cache);
 
 			// cache something
 			CacheKey fooKey = CreateCacheKey("foo");
@@ -47,7 +46,8 @@ namespace NHibernate.Test.CacheTest
 
 			Assert.IsNull(ccs.Get(fooKey, longBefore));
 			Assert.AreEqual("foo", ccs.Get(fooKey, after));
-			Assert.IsFalse(ccs.Put(fooKey, "foo", before, null, null, false));
+			Assert.IsFalse(ccs.Put(fooKey, "foo", before, null, null, true));
+			Assert.IsTrue(ccs.Put(fooKey, "foo", before, null, null, false));
 
 			// update it;
 
@@ -130,7 +130,7 @@ namespace NHibernate.Test.CacheTest
 			Assert.AreEqual("baz", ccs.Get(fooKey, longLongAfter));
 		}
 
-		private void DoTestMinValueTimestampOnStrategy(ICache cache, ICacheConcurrencyStrategy strategy)
+		private void DoTestMinValueTimestampOnStrategy(CacheBase cache, ICacheConcurrencyStrategy strategy)
 		{
 			CacheKey key = CreateCacheKey("key");
 			strategy.Cache = cache;
@@ -143,13 +143,18 @@ namespace NHibernate.Test.CacheTest
 		[Test]
 		public void MinValueTimestamp()
 		{
-			ICache cache = new HashtableCacheProvider().BuildCache("region", new Dictionary<string, string>());
-			ICacheConcurrencyStrategy strategy = new ReadWriteCache();
-			strategy.Cache = cache;
+			var cache = new HashtableCacheProvider().BuildCache("region", new Dictionary<string, string>());
 
-			DoTestMinValueTimestampOnStrategy(cache, new ReadWriteCache());
-			DoTestMinValueTimestampOnStrategy(cache, new NonstrictReadWriteCache());
-			DoTestMinValueTimestampOnStrategy(cache, new ReadOnlyCache());
+			DoTestMinValueTimestampOnStrategy(cache, CreateCache(cache));
+			DoTestMinValueTimestampOnStrategy(cache, CreateCache(cache, CacheFactory.NonstrictReadWrite));
+			DoTestMinValueTimestampOnStrategy(cache, CreateCache(cache, CacheFactory.ReadOnly));
 		}
+
+		protected virtual ICacheConcurrencyStrategy CreateCache(CacheBase cache, string strategy = CacheFactory.ReadWrite)
+		{
+			return CacheFactory.CreateCache(strategy, cache, Sfi.Settings);
+		}
+
+		protected override string[] Mappings => Array.Empty<string>();
 	}
 }

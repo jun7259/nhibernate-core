@@ -4,11 +4,15 @@ using NUnit.Framework;
 
 namespace NHibernate.Test.NHSpecificTest.NH2746
 {
+	[TestFixture]
 	public class Fixture: BugTestCase
 	{
 		[Test]
 		public void TestQuery()
 		{
+			if (!Dialect.SupportsSubSelectsWithPagingAsInPredicateRhs)
+				Assert.Ignore("Current dialect does not support paging within IN sub-queries");
+
 			using (ISession session = OpenSession())
 			{
 				DetachedCriteria page = DetachedCriteria.For<T1>()
@@ -20,7 +24,7 @@ namespace NHibernate.Test.NHSpecificTest.NH2746
 				ICriteria crit = session.CreateCriteria<T1>()
 					.Add(Subqueries.PropertyIn("id", page))
 					.SetResultTransformer(new DistinctRootEntityResultTransformer())
-					.SetFetchMode("Children", NHibernate.FetchMode.Join);
+					.Fetch("Children");
 
 				session.EnableFilter("nameFilter").SetParameter("name", "Another child");
 

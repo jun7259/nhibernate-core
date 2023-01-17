@@ -1,8 +1,8 @@
-using System;
 using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
-using System.Data;
+using System.Data.Common;
+using NHibernate.Cache;
 using NHibernate.Engine;
 using NHibernate.Hql;
 using NHibernate.Param;
@@ -11,20 +11,22 @@ using NHibernate.Persister.Entity;
 using NHibernate.SqlCommand;
 using NHibernate.Transform;
 using NHibernate.Type;
-using NHibernate.Util;
 using IQueryable = NHibernate.Persister.Entity.IQueryable;
+using NHibernate.Persister;
 
 namespace NHibernate.Loader.Custom
 {
 	/// <summary> 
 	/// Extension point for loaders which use a SQL result set with "unexpected" column aliases. 
 	/// </summary>
-	public class CustomLoader : Loader
+	public partial class CustomLoader : Loader
 	{
-		// Currently *not* cachable if autodiscover types is in effect (e.g. "select * ...")
+		// If cached and autodiscover types is in effect (e.g. "select * ..." or some scalar expression, ...)
+		// the types will also have to be discovered at cache hit, from the cache results.
 
 		private readonly SqlString sql;
-		private readonly ISet<string> querySpaces = new HashSet<string>();
+		private readonly HashSet<string> querySpaces = new HashSet<string>();
+		private readonly bool supportsQueryCache = true;
 		private List<IParameterSpecification> parametersSpecifications;
 
 		private readonly IQueryable[] entityPersisters;
@@ -34,17 +36,28 @@ namespace NHibernate.Loader.Custom
 		private readonly IQueryableCollection[] collectionPersisters;
 		private readonly int[] collectionOwners;
 		private readonly ICollectionAliases[] collectionAliases;
+		private readonly IPersister[] customPersisters;
 
 		private readonly LockMode[] lockModes;
 		private readonly ResultRowProcessor rowProcessor;
 
-		private IType[] resultTypes;
+		private readonly bool[] includeInResultRow;
+
 		private string[] transformerAliases;
 
 		public CustomLoader(ICustomQuery customQuery, ISessionFactoryImplementor factory) : base(factory)
 		{
 			sql = customQuery.SQL;
 			querySpaces.UnionWith(customQuery.QuerySpaces);
+			if (querySpaces.Count > 0)
+			{
+				customPersisters = factory
+					.GetEntityPersisters(querySpaces).OfType<IPersister>()
+					.Concat(factory.GetCollectionPersisters(querySpaces).OfType<IPersister>())
+					.ToArray();
+				supportsQueryCache = customPersisters.All(x => x.SupportsQueryCache);
+			}
+
 			parametersSpecifications = customQuery.CollectedParametersSpecifications.ToList();
 
 			List<IQueryable> entitypersisters = new List<IQueryable>();
@@ -61,6 +74,8 @@ namespace NHibernate.Loader.Custom
 			List<IType> resulttypes = new List<IType>();
 			List<string> specifiedAliases = new List<string>();
 
+			List<bool> includeInResultRowList = new List<bool>();
+
 			int returnableCounter = 0;
 			bool hasScalars = false;
 
@@ -72,6 +87,7 @@ namespace NHibernate.Loader.Custom
 					resulttypes.Add(scalarRtn.Type);
 					specifiedAliases.Add(scalarRtn.ColumnAlias);
 					resultColumnProcessors.Add(new ScalarResultColumnProcessor(scalarRtn.ColumnAlias, scalarRtn.Type));
+					includeInResultRowList.Add(true);
 					hasScalars = true;
 				}
 				else if (rtn is RootReturn)
@@ -87,6 +103,9 @@ namespace NHibernate.Loader.Custom
 					specifiedAliases.Add(rootRtn.Alias);
 					entityaliases.Add(rootRtn.EntityAliases);
 					querySpaces.UnionWith(persister.QuerySpaces);
+					// 6.0 TODO: Use IPersister.SupportsQueryCache property once IPersister's todo is done.
+					supportsQueryCache = supportsQueryCache && persister.SupportsQueryCache();
+					includeInResultRowList.Add(true);
 				}
 				else if (rtn is CollectionReturn)
 				{
@@ -110,7 +129,10 @@ namespace NHibernate.Loader.Custom
 						entityowners.Add(-1);
 						entityaliases.Add(collRtn.ElementEntityAliases);
 						querySpaces.UnionWith(elementPersister.QuerySpaces);
+						// 6.0 TODO: Use IPersister.SupportsQueryCache property once IPersister's todo is done.
+						supportsQueryCache = supportsQueryCache && elementPersister.SupportsQueryCache();
 					}
+					includeInResultRowList.Add(true);
 				}
 				else if (rtn is EntityFetchReturn)
 				{
@@ -128,6 +150,9 @@ namespace NHibernate.Loader.Custom
 					specifiedAliases.Add(fetchRtn.Alias);
 					entityaliases.Add(fetchRtn.EntityAliases);
 					querySpaces.UnionWith(persister.QuerySpaces);
+					// 6.0 TODO: Use IPersister.SupportsQueryCache property once IPersister's todo is done.
+					supportsQueryCache = supportsQueryCache && persister.SupportsQueryCache();
+					includeInResultRowList.Add(false);
 				}
 				else if (rtn is CollectionFetchReturn)
 				{
@@ -152,7 +177,10 @@ namespace NHibernate.Loader.Custom
 						entityowners.Add(ownerIndex);
 						entityaliases.Add(fetchRtn.ElementEntityAliases);
 						querySpaces.UnionWith(elementPersister.QuerySpaces);
+						// 6.0 TODO: Use IPersister.SupportsQueryCache property once IPersister's todo is done.
+						supportsQueryCache = supportsQueryCache && elementPersister.SupportsQueryCache();
 					}
+					includeInResultRowList.Add(false);
 				}
 				else
 				{
@@ -167,14 +195,26 @@ namespace NHibernate.Loader.Custom
 			collectionOwners = collectionowners.ToArray();
 			collectionAliases = collectionaliases.ToArray();
 			lockModes = lockmodes.ToArray();
-			resultTypes = resulttypes.ToArray();
+			ResultTypes = resulttypes.ToArray();
 			transformerAliases = specifiedAliases.ToArray();
 			rowProcessor = new ResultRowProcessor(hasScalars, resultColumnProcessors.ToArray());
+			includeInResultRow = includeInResultRowList.ToArray();
+			ResultRowAliases = transformerAliases.Where((a, i) => includeInResultRowList[i]).ToArray();
 		}
 
 		public ISet<string> QuerySpaces
 		{
 			get { return querySpaces; }
+		}
+
+		internal override bool IsCacheable(QueryParameters queryParameters)
+		{
+			return IsCacheable(
+				queryParameters,
+				supportsQueryCache,
+				entityPersisters
+					.OfType<IPersister>()
+					.Union(customPersisters ?? Enumerable.Empty<IPersister>()));
 		}
 
 		protected override int[] CollectionOwners
@@ -265,53 +305,62 @@ namespace NHibernate.Loader.Custom
 			get { return entityPersisters; }
 		}
 
-		protected override ICollectionPersister[] CollectionPersisters
+		protected internal override ICollectionPersister[] CollectionPersisters
 		{
 			get { return collectionPersisters; }
 		}
 
 		public IList List(ISessionImplementor session, QueryParameters queryParameters)
 		{
-			return List(session, queryParameters, querySpaces, resultTypes);
+			return List(session, queryParameters, querySpaces);
 		}
 
 		// Not ported: scroll
 
-		protected override object GetResultColumnOrRow(object[] row, IResultTransformer resultTransformer, IDataReader rs,
+		protected override object GetResultColumnOrRow(object[] row, IResultTransformer resultTransformer, DbDataReader rs,
 		                                               ISessionImplementor session)
 		{
 			return rowProcessor.BuildResultRow(row, rs, resultTransformer != null, session);
 		}
 
+		protected override object[] GetResultRow(object[] row, DbDataReader rs, ISessionImplementor session)
+		{
+			return rowProcessor.BuildResultRow(row, rs, session);
+		}
+
+		protected override string[] ResultRowAliases { get; }
 
 		protected override IResultTransformer ResolveResultTransformer(IResultTransformer resultTransformer)
 		{
-			return HolderInstantiator.ResolveResultTransformer(null, resultTransformer);
+			return resultTransformer;
+		}
+
+		protected override bool[] IncludeInResultRow
+		{
+			get { return includeInResultRow; }
 		}
 
 		public override IList GetResultList(IList results, IResultTransformer resultTransformer)
 		{
 			// meant to handle dynamic instantiation queries...(Copy from QueryLoader)
-			HolderInstantiator holderInstantiator =
-				HolderInstantiator.GetHolderInstantiator(null, resultTransformer, ReturnAliasesForTransformer);
-			if (holderInstantiator.IsRequired)
+			var returnAliases = ReturnAliasesForTransformer;
+
+			if (resultTransformer != null)
 			{
-				for (int i = 0; i < results.Count; i++)
+				for (var i = 0; i < results.Count; i++)
 				{
-					object[] row = (object[]) results[i];
-					object result = holderInstantiator.Instantiate(row);
-					results[i] = result;
+					var row = (object[]) results[i];
+					results[i] = resultTransformer.TransformTuple(row, returnAliases);
 				}
 
 				return resultTransformer.TransformList(results);
 			}
-			else
-			{
-				return results;
-			}
+
+			return results;
 		}
 
-		protected internal override void AutoDiscoverTypes(IDataReader rs)
+		protected internal override void AutoDiscoverTypes(
+			DbDataReader rs, QueryParameters queryParameters, IResultTransformer forcedResultTransformer)
 		{
 			MetaData metadata = new MetaData(rs);
 			List<string> aliases = new List<string>();
@@ -324,8 +373,11 @@ namespace NHibernate.Loader.Custom
 				columnProcessor.PerformDiscovery(metadata, types, aliases);
 			}
 
-			resultTypes = types.ToArray();
+			ResultTypes = types.ToArray();
 			transformerAliases = aliases.ToArray();
+			if (forcedResultTransformer is CacheableResultTransformer cacheableResultTransformer)
+				cacheableResultTransformer.SupplyAutoDiscoveredParameters(
+					queryParameters.ResultTransformer, transformerAliases);
 		}
 
 		protected override void ResetEffectiveExpectedType(IEnumerable<IParameterSpecification> parameterSpecs, QueryParameters queryParameters)
@@ -338,11 +390,6 @@ namespace NHibernate.Loader.Custom
 			return parametersSpecifications;
 		}
 
-		public IType[] ResultTypes
-		{
-			get { return resultTypes; }
-		}
-
 		public string[] ReturnAliases
 		{
 			get { return transformerAliases; }
@@ -353,7 +400,7 @@ namespace NHibernate.Loader.Custom
 			get { return parametersSpecifications.OfType<NamedParameterSpecification>().Select(np=> np.Name ); }
 		}
 
-		public class ResultRowProcessor
+		public partial class ResultRowProcessor
 		{
 			private readonly bool hasScalars;
 			private IResultColumnProcessor[] columnProcessors;
@@ -381,7 +428,7 @@ namespace NHibernate.Loader.Custom
 			/// At this point, Loader has already processed all non-scalar result data.  We
 			/// just need to account for scalar result data here...
 			/// </remarks>
-			public object BuildResultRow(object[] data, IDataReader resultSet, bool hasTransformer, ISessionImplementor session)
+			public object BuildResultRow(object[] data, DbDataReader resultSet, bool hasTransformer, ISessionImplementor session)
 			{
 				object[] resultRow;
 				// NH Different behavior (patched in NH-1612 to solve Hibernate issue HHH-2831).
@@ -391,17 +438,29 @@ namespace NHibernate.Loader.Custom
 				}
 				else
 				{
-					// build an array with indices equal to the total number
-					// of actual returns in the result Hibernate will return
-					// for this query (scalars + non-scalars)
-					resultRow = new object[columnProcessors.Length];
-					for (int i = 0; i < columnProcessors.Length; i++)
-					{
-						resultRow[i] = columnProcessors[i].Extract(data, resultSet, session);
-					}
+					resultRow = ExtractResultRow(data, resultSet, session);
 				}
 
 				return (hasTransformer) ? resultRow : (resultRow.Length == 1) ? resultRow[0] : resultRow;
+			}
+
+			public object[] BuildResultRow(object[] data, DbDataReader resultSet, ISessionImplementor session)
+			{
+				// NH Different behavior (patched in NH-1612 to solve Hibernate issue HHH-2831).
+				return !hasScalars && data.Length == 0 ? data : ExtractResultRow(data, resultSet, session);
+			}
+
+			private object[] ExtractResultRow(object[] data, DbDataReader resultSet, ISessionImplementor session)
+			{
+				// build an array with indices equal to the total number
+				// of actual returns in the result Hibernate will return
+				// for this query (scalars + non-scalars)
+				var resultRow = new object[columnProcessors.Length];
+				for (var i = 0; i < columnProcessors.Length; i++)
+				{
+					resultRow[i] = columnProcessors[i].Extract(data, resultSet, session);
+				}
+				return resultRow;
 			}
 
 			public void PrepareForAutoDiscovery(MetaData metadata)
@@ -418,13 +477,13 @@ namespace NHibernate.Loader.Custom
 			}
 		}
 
-		public interface IResultColumnProcessor
+		public partial interface IResultColumnProcessor
 		{
-			object Extract(object[] data, IDataReader resultSet, ISessionImplementor session);
+			object Extract(object[] data, DbDataReader resultSet, ISessionImplementor session);
 			void PerformDiscovery(MetaData metadata, IList<IType> types, IList<string> aliases);
 		}
 
-		public class NonScalarResultColumnProcessor : IResultColumnProcessor
+		public partial class NonScalarResultColumnProcessor : IResultColumnProcessor
 		{
 			private readonly int position;
 
@@ -433,7 +492,7 @@ namespace NHibernate.Loader.Custom
 				this.position = position;
 			}
 
-			public object Extract(object[] data, IDataReader resultSet, ISessionImplementor session)
+			public object Extract(object[] data, DbDataReader resultSet, ISessionImplementor session)
 			{
 				return data[position];
 			}
@@ -441,7 +500,7 @@ namespace NHibernate.Loader.Custom
 			public void PerformDiscovery(MetaData metadata, IList<IType> types, IList<string> aliases) {}
 		}
 
-		public class ScalarResultColumnProcessor : IResultColumnProcessor
+		public partial class ScalarResultColumnProcessor : IResultColumnProcessor
 		{
 			private int position = -1;
 			private string alias;
@@ -458,7 +517,7 @@ namespace NHibernate.Loader.Custom
 				this.type = type;
 			}
 
-			public object Extract(object[] data, IDataReader resultSet, ISessionImplementor session)
+			public object Extract(object[] data, DbDataReader resultSet, ISessionImplementor session)
 			{
 				return type.NullSafeGet(resultSet, alias, session, null);
 			}
@@ -487,13 +546,13 @@ namespace NHibernate.Loader.Custom
 		/// </summary>
 		public class MetaData
 		{
-			private readonly IDataReader resultSet;
+			private readonly DbDataReader resultSet;
 
 			/// <summary>
 			/// Initializes a new instance of the <see cref="MetaData"/> class.
 			/// </summary>
 			/// <param name="resultSet">The result set.</param>
-			public MetaData(IDataReader resultSet)
+			public MetaData(DbDataReader resultSet)
 			{
 				this.resultSet = resultSet;
 			}

@@ -1,11 +1,21 @@
 using System.Collections;
+using NHibernate.Dialect;
 using NUnit.Framework;
 
 namespace NHibernate.Test.Subselect
 {
+	[TestFixture]
 	public class ClassSubselectFixture: TestCase
 	{
-		protected override IList Mappings
+		protected override bool AppliesTo(Dialect.Dialect dialect)
+		{
+			// Oracle does not support the union of the literal 'human' with an Unicode column. Typing the column AnsiString does not
+			// solve the issue because it is mapped to Oracle varchar2 which can still be Unicode, depending on the server configuration.
+			// Using the literal N'human' breaks some other databases, not supporting the "N" prefix.
+			return !(Dialect is Oracle8iDialect);
+		}
+
+		protected override string[] Mappings
 		{
 			get { return new[] {"Subselect.Beings.hbm.xml"}; }
 		}

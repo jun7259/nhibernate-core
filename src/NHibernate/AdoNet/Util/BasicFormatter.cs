@@ -7,6 +7,8 @@ namespace NHibernate.AdoNet.Util
 {
 	public class BasicFormatter : IFormatter
 	{
+		private static readonly INHibernateLogger Logger = NHibernateLogger.For(typeof(BasicFormatter));
+
 		protected const string IndentString = "    ";
 		protected const string Initial = "\n    ";
 		protected static readonly HashSet<string> beginClauses = new HashSet<string>();
@@ -20,6 +22,7 @@ namespace NHibernate.AdoNet.Util
 		{
 			beginClauses.Add("left");
 			beginClauses.Add("right");
+			beginClauses.Add("cross");
 			beginClauses.Add("inner");
 			beginClauses.Add("outer");
 			beginClauses.Add("group");
@@ -59,14 +62,23 @@ namespace NHibernate.AdoNet.Util
 
 		public virtual string Format(string source)
 		{
-			return new FormatProcess(source).Perform();
+			try
+			{
+				using (var fp = new FormatProcess(source))
+					return fp.Perform();
+			}
+			catch (Exception e)
+			{
+				Logger.Warn(e, "Unable to format provided SQL: {0}", source);
+				return source;
+			}
 		}
 
 		#endregion
 
 		#region Nested type: FormatProcess
 
-		private class FormatProcess
+		private class FormatProcess : IDisposable
 		{
 			private readonly List<bool> afterByOrFromOrSelects = new List<bool>();
 			private readonly List<int> parenCounts = new List<int>();
@@ -429,7 +441,7 @@ namespace NHibernate.AdoNet.Util
 
 			private static bool IsWhitespace(string token)
 			{
-				return StringHelper.WhiteSpace.IndexOf(token) >= 0;
+				return StringHelper.WhiteSpace.IndexOf(token, StringComparison.Ordinal) >= 0;
 			}
 
 			private void Newline()
@@ -440,6 +452,11 @@ namespace NHibernate.AdoNet.Util
 					result.Append(IndentString);
 				}
 				beginLine = true;
+			}
+
+			public void Dispose()
+			{
+				tokens.Dispose();
 			}
 		}
 

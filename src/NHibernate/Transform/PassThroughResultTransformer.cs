@@ -7,7 +7,7 @@ namespace NHibernate.Transform
 	[Serializable]
 	public class PassThroughResultTransformer : IResultTransformer, ITupleSubsetResultTransformer
 	{
-		private static readonly object Hasher = new object();
+		internal static readonly PassThroughResultTransformer Instance = new PassThroughResultTransformer();
 
 		#region IResultTransformer Members
 
@@ -23,12 +23,10 @@ namespace NHibernate.Transform
 
 		#endregion
 
-
 		public bool IsTransformedValueATupleElement(string[] aliases, int tupleLength)
 		{
 			return tupleLength == 1;
 		}
-
 
 		public bool[] IncludeInTransform(string[] aliases, int tupleLength)
 		{
@@ -36,7 +34,6 @@ namespace NHibernate.Transform
 			ArrayHelper.Fill(includeInTransformedResult, true);
 			return includeInTransformedResult;
 		}
-
 
 		internal IList UntransformToTuples(IList results, bool isSingleResult)
 		{
@@ -52,25 +49,23 @@ namespace NHibernate.Transform
 			return results;
 		}
 
-
 		internal object[] UntransformToTuple(object transformed, bool isSingleResult)
 		{
 			return isSingleResult ? new[] {transformed} : (object[]) transformed;
 		}
 
-
 		public override bool Equals(object obj)
 		{
+			if (ReferenceEquals(obj, this))
+				return true;
 			if (obj == null)
-			{
 				return false;
-			}
-			return obj.GetHashCode() == Hasher.GetHashCode();
+			return obj.GetType() == GetType();
 		}
 
 		public override int GetHashCode()
 		{
-			return Hasher.GetHashCode();
+			return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Instance);
 		}
 	}
 }

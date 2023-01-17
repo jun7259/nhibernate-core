@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Runtime.Serialization;
 using System.Security;
-using System.Security.Permissions;
-
+using NHibernate.Connection;
 using NHibernate.Engine;
+using NHibernate.Impl;
 
 namespace NHibernate.AdoNet
 {
@@ -12,184 +14,272 @@ namespace NHibernate.AdoNet
 	/// Manages the database connection and transaction for an <see cref="ISession" />.
 	/// </summary>
 	/// <remarks>
-	/// This class corresponds to ConnectionManager and JDBCContext in Hibernate,
-	/// combined.
+	/// This class corresponds to <c>LogicalConnectionImplementor</c> and <c>JdbcCoordinator</c>
+	/// in Hibernate, combined.
 	/// </remarks>
 	[Serializable]
-	public class ConnectionManager : ISerializable, IDeserializationCallback
+	public partial class ConnectionManager : ISerializable, IDeserializationCallback
 	{
-		private static readonly IInternalLogger log = LoggerProvider.LoggerFor(typeof(ConnectionManager));
-
-		public interface Callback
-		{
-			void ConnectionOpened();
-			void ConnectionCleanedUp();
-			bool IsTransactionInProgress { get; }
-		}
+		private readonly IConnectionAccess _connectionAccess;
+		private static readonly INHibernateLogger _log = NHibernateLogger.For(typeof(ConnectionManager));
 
 		[NonSerialized]
-		private IDbConnection connection;
+		private DbConnection _connection;
+		[NonSerialized]
+		private DbConnection _backupConnection;
+		[NonSerialized]
+		private System.Transactions.Transaction _currentSystemTransaction;
+		[NonSerialized]
+		private System.Transactions.Transaction _backupCurrentSystemTransaction;
 		// Whether we own the connection, i.e. connect and disconnect automatically.
-		private bool ownConnection;
+		private bool _ownConnection;
 
 		[NonSerialized]
-		private ITransaction transaction;
+		private ITransaction _transaction;
 
 		[NonSerialized]
-		private IBatcher batcher;
+		private IBatcher _batcher;
 
-		private readonly ISessionImplementor session;
-		private readonly ConnectionReleaseMode connectionReleaseMode;
-		private readonly IInterceptor interceptor;
+		private readonly ConnectionReleaseMode _connectionReleaseMode;
+		private readonly IInterceptor _interceptor;
+		[NonSerialized]
+		private readonly List<ISessionImplementor> _dependentSessions = new List<ISessionImplementor>();
+
+		/// <summary>
+		/// The session responsible for the lifecycle of the connection manager.
+		/// </summary>
+		public ISessionImplementor Session { get; }
+
+		/// <summary>
+		/// The sessions using the connection manager of the session responsible for it.
+		/// </summary>
+		public IReadOnlyCollection<ISessionImplementor> DependentSessions => _dependentSessions;
 
 		[NonSerialized]
-		private bool isFlushing;
+		private bool _releasesEnabled = true;
 
-		private bool flushingFromDtcTransaction;
+		[NonSerialized]
+		private bool _processingFromSystemTransaction;
+		[NonSerialized]
+		private bool _allowConnectionUsage = true;
+		// Do we need to release the current connection instead of yielding it?
+		[NonSerialized]
+		private bool _connectionReleaseRequired;
+		// Do we need to explicitly enlist the current connection before yielding it?
+		[NonSerialized]
+		private bool _connectionEnlistmentRequired;
+
+		/// <summary>
+		/// <see langword="true"/> when the connection manager is being used from system transaction completion events,
+		/// <see langword="false"/> otherwise.
+		/// </summary>
+		public bool ProcessingFromSystemTransaction => _processingFromSystemTransaction;
 
 		public ConnectionManager(
 			ISessionImplementor session,
-			IDbConnection suppliedConnection,
+			DbConnection suppliedConnection,
 			ConnectionReleaseMode connectionReleaseMode,
-			IInterceptor interceptor)
+			IInterceptor interceptor,
+			bool shouldAutoJoinTransaction,
+			IConnectionAccess connectionAccess)
 		{
-			this.session = session;
-			connection = suppliedConnection;
-			this.connectionReleaseMode = connectionReleaseMode;
+			Session = session;
+			_connection = suppliedConnection;
+			_connectionReleaseMode = connectionReleaseMode;
 
-			this.interceptor = interceptor;
-			batcher = session.Factory.Settings.BatcherFactory.CreateBatcher(this, interceptor);
+			_interceptor = interceptor;
+			_batcher = session.Factory.Settings.BatcherFactory.CreateBatcher(this, interceptor);
 
-			ownConnection = suppliedConnection == null;
+			_ownConnection = suppliedConnection == null;
+			ShouldAutoJoinTransaction = shouldAutoJoinTransaction;
+			_connectionAccess = connectionAccess ?? throw new ArgumentNullException(nameof(connectionAccess));
 		}
+
+		//Since 5.3
+		[Obsolete("Use overload with connectionAccess parameter")]
+		public ConnectionManager(
+			ISessionImplementor session,
+			DbConnection suppliedConnection,
+			ConnectionReleaseMode connectionReleaseMode,
+			IInterceptor interceptor,
+			bool shouldAutoJoinTransaction) : this(session, suppliedConnection, connectionReleaseMode, interceptor, shouldAutoJoinTransaction, new NonContextualConnectionAccess(session.Factory))
+		{
+		}
+
+		public void AddDependentSession(ISessionImplementor session)
+		{
+			_dependentSessions.Add(session);
+		}
+
+		public void RemoveDependentSession(ISessionImplementor session)
+		{
+			_dependentSessions.Remove(session);
+		}
+
+		public bool IsInActiveExplicitTransaction
+			=> _transaction != null && _transaction.IsActive;
 
 		public bool IsInActiveTransaction
-		{
-			get
-			{
-				if (transaction != null && transaction.IsActive)
-					return true;
-				return Factory.TransactionFactory.IsInDistributedActiveTransaction(session);
-			}
-		}
+			=> IsInActiveExplicitTransaction || Factory.TransactionFactory.IsInActiveSystemTransaction(Session);
 
 		public bool IsConnected
-		{
-			get { return connection != null || ownConnection; }
-		}
+			=> _connection != null || _ownConnection;
+
+		public bool ShouldAutoJoinTransaction { get; }
 
 		public void Reconnect()
 		{
 			if (IsConnected)
 			{
-				throw new HibernateException("session already connected");
+				throw new HibernateException("Session already connected");
 			}
 
-			ownConnection = true;
+			_ownConnection = true;
 		}
 
-		public void Reconnect(IDbConnection suppliedConnection)
+		public void Reconnect(DbConnection suppliedConnection)
 		{
 			if (IsConnected)
 			{
-				throw new HibernateException("session already connected");
+				throw new HibernateException("Session already connected");
 			}
 
-			log.Debug("reconnecting session");
-			connection = suppliedConnection;
-			ownConnection = false;
+			_log.Debug("Reconnecting session");
+			_connection = suppliedConnection;
+			_ownConnection = false;
+
+			// May fail if the supplied connection is enlisted in another transaction, which would be an user
+			// error. (Either disable auto join transaction or supply an enlist-able connection.)
+			if (_currentSystemTransaction != null)
+				_connection.EnlistTransaction(_currentSystemTransaction);
 		}
 
-		public IDbConnection Close()
+		public DbConnection Close()
 		{
-			if (batcher != null)
-			{
-				batcher.Dispose();
-			}
+			_batcher?.Dispose();
 
-			if (transaction != null)
+			_transaction?.Dispose();
+
+			if (_backupConnection != null)
 			{
-				transaction.Dispose();
+				_log.Warn("Backup connection was still defined at time of closing.");
+				_connectionAccess.CloseConnection(_backupConnection);
+				_backupConnection = null;
 			}
 
 			// When the connection is null nothing needs to be done - if there
 			// is a value for connection then Disconnect() was not called - so we
 			// need to ensure it gets called.
-			if (connection == null)
+			if (_connection == null)
 			{
-				ownConnection = false;
+				_ownConnection = false;
 				return null;
 			}
-			else
-			{
-				return Disconnect();
-			}
+			return Disconnect();
 		}
 
-		private IDbConnection DisconnectSuppliedConnection()
+		private DbConnection DisconnectSuppliedConnection()
 		{
-			if (connection == null)
+			if (_connection == null)
 			{
 				throw new HibernateException("Session already disconnected");
 			}
 
-			IDbConnection c = connection;
-			connection = null;
+			var c = _connection;
+			_connection = null;
 			return c;
 		}
 
 		private void DisconnectOwnConnection()
 		{
-			if (connection == null)
+			if (_connection == null)
 			{
 				// No active connection
 				return;
 			}
 
-			if (batcher != null)
-			{
-				batcher.CloseCommands();
-			}
+			_batcher?.CloseCommands();
 
 			CloseConnection();
 		}
 
-		public IDbConnection Disconnect()
+		public DbConnection Disconnect()
 		{
-			if (IsInActiveTransaction)
-				throw new InvalidOperationException("Disconnect cannot be called while a transaction is in progress.");
+			if (IsInActiveExplicitTransaction)
+				throw new InvalidOperationException("Disconnect cannot be called while an explicit transaction is in progress.");
 
-			if (!ownConnection)
+			if (!_ownConnection)
 			{
 				return DisconnectSuppliedConnection();
 			}
-			else
-			{
-				DisconnectOwnConnection();
-				ownConnection = false;
-				return null;
-			}
+
+			DisconnectOwnConnection();
+			_ownConnection = false;
+			return null;
 		}
 
 		private void CloseConnection()
 		{
-			Factory.ConnectionProvider.CloseConnection(connection);
-			connection = null;
+			_connectionAccess.CloseConnection(_connection);
+			_connection = null;
 		}
 
-		public IDbConnection GetConnection()
+		/// <summary>
+		/// Get a new opened connection. The caller is responsible for closing it.
+		/// </summary>
+		/// <returns>An opened connection.</returns>
+		public DbConnection GetNewConnection()
 		{
-			if (connection == null)
+			return _connectionAccess.GetConnection();
+		}
+
+		/// <summary>
+		/// Get the managed connection.
+		/// </summary>
+		/// <returns>An opened connection.</returns>
+		public DbConnection GetConnection()
+		{
+			if (!_allowConnectionUsage)
 			{
-				if (ownConnection)
+				throw new HibernateException("Connection usage is currently disallowed");
+			}
+
+			if (_connectionReleaseRequired)
+			{
+				_connectionReleaseRequired = false;
+				if (_connection != null)
 				{
-					connection = Factory.ConnectionProvider.GetConnection();
+					_log.Debug("Releasing database connection");
+					CloseConnection();
+				}
+			}
+
+			if (_connectionEnlistmentRequired)
+			{
+				_connectionEnlistmentRequired = false;
+				// No null check on transaction: we need to do it for connection supporting it, and
+				// _connectionEnlistmentRequired should not be set if the transaction is null while the
+				// connection does not support it.
+				_connection?.EnlistTransaction(_currentSystemTransaction);
+			}
+
+			if (_connection == null)
+			{
+				if (_ownConnection)
+				{
+					_connection = GetNewConnection();
+					// Will fail if the connection is already enlisted in another transaction.
+					// Probable case: nested transaction scope with connection auto-enlistment enabled.
+					// That is an user error.
+					if (_currentSystemTransaction != null)
+						_connection.EnlistTransaction(_currentSystemTransaction);
+
 					if (Factory.Statistics.IsStatisticsEnabled)
 					{
 						Factory.StatisticsImplementor.Connect();
 					}
 				}
-				else if (session.IsOpen)
+				else if (Session.IsOpen)
 				{
 					throw new HibernateException("Session is currently disconnected");
 				}
@@ -198,7 +288,7 @@ namespace NHibernate.AdoNet
 					throw new HibernateException("Session is closed");
 				}
 			}
-			return connection;
+			return _connection;
 		}
 
 		public void AfterTransaction()
@@ -207,37 +297,37 @@ namespace NHibernate.AdoNet
 			{
 				AggressiveRelease();
 			}
-			else if (IsAggressiveRelease && batcher.HasOpenResources)
+			else if (IsAggressiveRelease && _batcher.HasOpenResources)
 			{
-				log.Info("forcing batcher resource cleanup on transaction completion; forgot to close ScrollableResults/Enumerable?");
-				batcher.CloseCommands();
+				_log.Info("Forcing batcher resource cleanup on transaction completion; forgot to close ScrollableResults/Enumerable?");
+				_batcher.CloseCommands();
 				AggressiveRelease();
 			}
 			else if (IsOnCloseRelease)
 			{
-				// log a message about potential connection leaks
-				log.Debug(
-					"transaction completed on session with on_close connection release mode; be sure to close the session to release ADO.Net resources!");
+				// _log a message about potential connection leaks
+				_log.Debug(
+					"Transaction completed on session with on_close connection release mode; be sure to close the session to release ADO.Net resources!");
 			}
-			transaction = null;
+			_transaction = null;
 		}
 
 		public void AfterStatement()
 		{
 			if (IsAggressiveRelease)
 			{
-				if (isFlushing)
+				if (!_releasesEnabled)
 				{
-					log.Debug("skipping aggressive-release due to flush cycle");
+					_log.Debug("Skipping aggressive-release due to manual disabling");
 				}
-				else if (batcher.HasOpenResources)
+				else if (_batcher.HasOpenResources)
 				{
-					log.Debug("skipping aggressive-release due to open resources on batcher");
+					_log.Debug("Skipping aggressive-release due to open resources on batcher");
 				}
 				// TODO H3:
 				//else if (borrowedConnection != null)
 				//{
-				//    log.Debug("skipping aggressive-release due to borrowed connection");
+				//    _log.Debug("skipping aggressive-release due to borrowed connection");
 				//}
 				else
 				{
@@ -248,26 +338,46 @@ namespace NHibernate.AdoNet
 
 		private void AggressiveRelease()
 		{
-			if (ownConnection && flushingFromDtcTransaction == false)
+			if (_ownConnection)
 			{
-				log.Debug("aggressively releasing database connection");
-				if (connection != null)
+				if (_connection != null)
 				{
-					CloseConnection();
+					if (_processingFromSystemTransaction)
+						_connectionReleaseRequired = true;
+					else
+					{
+						_log.Debug("Aggressively releasing database connection");
+						CloseConnection();
+					}
 				}
 			}
 		}
 
+		[NonSerialized]
+		private int _flushDepth;
+
 		public void FlushBeginning()
 		{
-			log.Debug("registering flush begin");
-			isFlushing = true;
+			if (_flushDepth == 0)
+			{
+				_log.Debug("Registering flush begin");
+				_releasesEnabled = false;
+			}
+			_flushDepth++;
 		}
 
 		public void FlushEnding()
 		{
-			log.Debug("registering flush end");
-			isFlushing = false;
+			_flushDepth--;
+			if (_flushDepth < 0)
+			{
+				throw new HibernateException("Mismatched flush handling");
+			}
+			if (_flushDepth == 0)
+			{
+				_releasesEnabled = true;
+				_log.Debug("Registering flush end");
+			}
 			AfterStatement();
 		}
 
@@ -275,24 +385,22 @@ namespace NHibernate.AdoNet
 
 		private ConnectionManager(SerializationInfo info, StreamingContext context)
 		{
-			ownConnection = info.GetBoolean("ownConnection");
-			session = (ISessionImplementor)info.GetValue("session", typeof(ISessionImplementor));
-			connectionReleaseMode =
+			_ownConnection = info.GetBoolean("ownConnection");
+			Session = (ISessionImplementor)info.GetValue("session", typeof(ISessionImplementor));
+			_connectionReleaseMode =
 				(ConnectionReleaseMode)info.GetValue("connectionReleaseMode", typeof(ConnectionReleaseMode));
-			interceptor = (IInterceptor)info.GetValue("interceptor", typeof(IInterceptor));
+			_interceptor = (IInterceptor)info.GetValue("interceptor", typeof(IInterceptor));
+			_connectionAccess = (IConnectionAccess) info.GetValue("connectionAccess", typeof(IConnectionAccess));
 		}
 
-#if NET_4_0
 		[SecurityCritical]
-#else
-		[SecurityPermission(SecurityAction.LinkDemand, Flags = SecurityPermissionFlag.SerializationFormatter)]
-#endif
 		public void GetObjectData(SerializationInfo info, StreamingContext context)
 		{
-			info.AddValue("ownConnection", ownConnection);
-			info.AddValue("session", session, typeof(ISessionImplementor));
-			info.AddValue("connectionReleaseMode", connectionReleaseMode, typeof(ConnectionReleaseMode));
-			info.AddValue("interceptor", interceptor, typeof(IInterceptor));
+			info.AddValue("ownConnection", _ownConnection);
+			info.AddValue("session", Session, typeof(ISessionImplementor));
+			info.AddValue("connectionReleaseMode", _connectionReleaseMode, typeof(ConnectionReleaseMode));
+			info.AddValue("interceptor", _interceptor, typeof(IInterceptor));
+			info.AddValue("connectionAccess", _connectionAccess, typeof(IConnectionAccess));
 		}
 
 		#endregion
@@ -301,117 +409,202 @@ namespace NHibernate.AdoNet
 
 		void IDeserializationCallback.OnDeserialization(object sender)
 		{
-			batcher = Factory.Settings.BatcherFactory.CreateBatcher(this, interceptor);
+			_batcher = Factory.Settings.BatcherFactory.CreateBatcher(this, _interceptor);
 		}
 
 		#endregion
 
 		public ITransaction BeginTransaction(IsolationLevel isolationLevel)
 		{
-			Transaction.Begin(isolationLevel);
-			return transaction;
+			EnsureTransactionIsCreated();
+			_transaction.Begin(isolationLevel);
+			return _transaction;
 		}
 
 		public ITransaction BeginTransaction()
 		{
-			Transaction.Begin();
-			return transaction;
+			EnsureTransactionIsCreated();
+			_transaction.Begin();
+			return _transaction;
 		}
 
+		private void EnsureTransactionIsCreated()
+		{
+			if (_transaction == null)
+			{
+				_transaction = Factory.TransactionFactory.CreateTransaction(Session);
+			}
+		}
+
+		// Since v5.3
+		[Obsolete("Use CurrentTransaction instead, and check for null.")]
 		public ITransaction Transaction
 		{
 			get
 			{
-				if (transaction == null)
-				{
-					transaction = Factory.TransactionFactory.CreateTransaction(session);
-				}
-				return transaction;
+				EnsureTransactionIsCreated();
+				return _transaction;
 			}
 		}
+
+		/// <summary>
+		/// The current transaction if any is ongoing, else <see langword="null" />.
+		/// </summary>
+		public ITransaction CurrentTransaction => _transaction;
 
 		public void AfterNonTransactionalQuery(bool success)
 		{
-			log.Debug("after autocommit");
+			_log.Debug("After autocommit");
 		}
 
 		private bool IsAfterTransactionRelease
-		{
-			get { return connectionReleaseMode == ConnectionReleaseMode.AfterTransaction; }
-		}
+			=> _connectionReleaseMode == ConnectionReleaseMode.AfterTransaction;
 
 		private bool IsOnCloseRelease
-		{
-			get { return connectionReleaseMode == ConnectionReleaseMode.OnClose; }
-		}
+			=> _connectionReleaseMode == ConnectionReleaseMode.OnClose;
 
 		private bool IsAggressiveRelease
-		{
-			get
-			{
-				if (connectionReleaseMode == ConnectionReleaseMode.AfterTransaction)
-				{
-					return !IsInActiveTransaction;
-				}
-				return false;
-			}
-		}
+			=> _connectionReleaseMode == ConnectionReleaseMode.AfterTransaction && !IsInActiveTransaction;
 
 		public ISessionFactoryImplementor Factory
-		{
-			get { return session.Factory; }
-		}
+			=> Session.Factory;
 
 		public bool IsReadyForSerialization
 		{
 			get
 			{
-				if (ownConnection)
+				if (_ownConnection)
 				{
-					return connection == null && !batcher.HasOpenResources;
+					return _connection == null && !_batcher.HasOpenResources;
 				}
-				else
-				{
-					return connection == null;
-				}
+				return _connection == null;
 			}
 		}
 
 		/// <summary> The batcher managed by this ConnectionManager. </summary>
 		public IBatcher Batcher
+			=> _batcher;
+
+		public DbCommand CreateCommand()
 		{
-			get { return batcher; }
+			var result = GetConnection().CreateCommand();
+			EnlistInTransaction(result);
+			return result;
 		}
 
-		public IDisposable FlushingFromDtcTransaction
+		/// <summary>
+		/// Enlist a command in the current transaction, if any.
+		/// </summary>
+		/// <param name="command">The command to enlist.</param>
+		public void EnlistInTransaction(DbCommand command)
 		{
-			get
+			if (command == null)
+				throw new ArgumentNullException(nameof(command));
+
+			if (_transaction != null)
 			{
-				flushingFromDtcTransaction = true;
-				return new StopFlushingFromDtcTransaction(this);
+				_transaction.Enlist(command);
+				return;
+			}
+
+			if (command.Transaction != null)
+			{
+				_log.Warn("set a nonnull DbCommand.Transaction to null because the Session had no Transaction");
+				command.Transaction = null;
 			}
 		}
 
-		private class StopFlushingFromDtcTransaction : IDisposable
+		/// <summary>
+		/// Enlist the connection into provided transaction if the connection should be enlisted.
+		/// Do nothing in case an explicit transaction is ongoing.
+		/// </summary>
+		/// <param name="transaction">The transaction in which the connection should be enlisted.</param>
+		public void EnlistIfRequired(System.Transactions.Transaction transaction)
 		{
-			private readonly ConnectionManager manager;
-
-			public StopFlushingFromDtcTransaction(ConnectionManager manager)
+			if (transaction == _currentSystemTransaction)
 			{
-				this.manager = manager;
+				// Short-circuit after having stored the transaction : they may be equal, but not the same reference.
+				// And the previous one may be an already disposed dependent clone, in which case we need to update
+				// our reference.
+				_currentSystemTransaction = transaction;
+				return;
+			}
+
+			_currentSystemTransaction = transaction;
+
+			// Most connections do not support enlisting in a system transaction while already participating
+			// in a local transaction. They are not supposed to be mixed anyway.
+			if (IsInActiveExplicitTransaction && transaction != null)
+				throw new InvalidOperationException("Cannot enlist in a system transaction while an explicit transaction has been started on the session.");
+
+			if (_connection == null || _connectionReleaseRequired)
+				return;
+
+			// Some drivers do not support enlistment with null. Skip for them, they are supposed
+			// to un-enlist by themselves.
+			if (transaction == null && !Factory.ConnectionProvider.Driver.SupportsNullEnlistment)
+			{
+				return;
+			}
+
+			if (!_allowConnectionUsage)
+			{
+				_connectionEnlistmentRequired = true;
+				return;
+			}
+
+			_connection.EnlistTransaction(transaction);
+		}
+
+		public IDisposable BeginProcessingFromSystemTransaction(bool allowConnectionUsage)
+		{
+			var needSwapping = _ownConnection && allowConnectionUsage &&
+				Factory.Dialect.SupportsConcurrentWritingConnectionsInSameTransaction;
+			if (needSwapping)
+			{
+				if (Batcher.HasOpenResources)
+					throw new InvalidOperationException("Batcher still has opened ressources at time of processing from system transaction.");
+				// Swap out current connection for avoiding using it concurrently to its own 2PC
+				_backupConnection = _connection;
+				_backupCurrentSystemTransaction = _currentSystemTransaction;
+				_connection = null;
+				_currentSystemTransaction = null;
+			}
+			_processingFromSystemTransaction = true;
+			var wasAllowingConnectionUsage = _allowConnectionUsage;
+			_allowConnectionUsage = allowConnectionUsage;
+			return new EndFlushingFromSystemTransaction(this, needSwapping, wasAllowingConnectionUsage);
+		}
+
+		private class EndFlushingFromSystemTransaction : IDisposable
+		{
+			private readonly ConnectionManager _manager;
+			private readonly bool _hasSwappedConnection;
+			private readonly bool _wasAllowingConnectionUsage;
+
+			public EndFlushingFromSystemTransaction(ConnectionManager manager, bool hasSwappedConnection, bool wasAllowingConnectionUsage)
+			{
+				_manager = manager;
+				_hasSwappedConnection = hasSwappedConnection;
+				_wasAllowingConnectionUsage = wasAllowingConnectionUsage;
 			}
 
 			public void Dispose()
 			{
-				manager.flushingFromDtcTransaction = false;
-			}
-		}
+				_manager._processingFromSystemTransaction = false;
+				_manager._allowConnectionUsage = _wasAllowingConnectionUsage;
 
-		public IDbCommand CreateCommand()
-		{
-			var result = GetConnection().CreateCommand();
-			Transaction.Enlist(result);
-			return result;
+				if (!_hasSwappedConnection)
+					return;
+
+				// Release the connection potentially acquired for processing from system transaction.
+				_manager.DisconnectOwnConnection();
+				// Swap back current connection
+				_manager._connection = _manager._backupConnection;
+				_manager._currentSystemTransaction = _manager._backupCurrentSystemTransaction;
+				_manager._backupConnection = null;
+				_manager._backupCurrentSystemTransaction = null;
+			}
 		}
 	}
 }

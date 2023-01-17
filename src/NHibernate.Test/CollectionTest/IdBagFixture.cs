@@ -8,7 +8,7 @@ namespace NHibernate.Test.CollectionTest
 	[TestFixture]
 	public class IdBagFixture : TestCase
 	{
-		protected override System.Collections.IList Mappings
+		protected override string[] Mappings
 		{
 			get { return new string[] { "CollectionTest.IdBagFixture.hbm.xml" }; }
 		}
@@ -20,7 +20,7 @@ namespace NHibernate.Test.CollectionTest
 
 		protected override void OnTearDown()
 		{
-			using( ISession s = sessions.OpenSession() )
+			using( ISession s = Sfi.OpenSession() )
 			{
 				s.Delete( "from A" );
 				s.Flush();

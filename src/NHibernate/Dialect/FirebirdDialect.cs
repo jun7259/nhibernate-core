@@ -1,12 +1,12 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using NHibernate.Dialect.Function;
 using NHibernate.Dialect.Schema;
 using NHibernate.Engine;
 using NHibernate.SqlCommand;
-using NHibernate.SqlTypes;
 using NHibernate.Type;
 using Environment = NHibernate.Cfg.Environment;
 
@@ -30,12 +30,6 @@ namespace NHibernate.Dialect
 	/// </remarks>
 	public class FirebirdDialect : Dialect
 	{
-		#region Fields
-
-		private const int MAX_DECIMAL_PRECISION = 18;
-
-		#endregion
-
 		public FirebirdDialect()
 		{
 			RegisterKeywords();
@@ -47,23 +41,6 @@ namespace NHibernate.Dialect
 		public override string AddColumnString
 		{
 			get { return "add"; }
-		}
-
-		public override string GetTypeName(SqlType sqlType)
-		{
-			if (IsUnallowedDecimal(sqlType.DbType, sqlType.Precision))
-				return base.GetTypeName(new SqlType(sqlType.DbType, MAX_DECIMAL_PRECISION, sqlType.Scale));
-
-			return base.GetTypeName(sqlType);
-		}
-
-		public override string GetTypeName(SqlType sqlType, int length, int precision, int scale)
-		{
-			var fbDecimalPrecision = precision;
-			if (IsUnallowedDecimal(sqlType.DbType, precision))
-				fbDecimalPrecision = MAX_DECIMAL_PRECISION;
-
-			return base.GetTypeName(sqlType, length, fbDecimalPrecision, scale);
 		}
 
 		public override string GetSelectSequenceNextValString(string sequenceName)
@@ -129,7 +106,7 @@ namespace NHibernate.Dialect
 			return queryString.Insert(insertIndex, limitFragment.ToSqlString());
 		}
 
-		#region Temporaray Table Support
+		#region Temporary Table Support
 
 		public override bool SupportsTemporaryTables
 		{
@@ -178,7 +155,7 @@ namespace NHibernate.Dialect
 		[Serializable]
 		private class CurrentTimeStamp : NoArgSQLFunction
 		{
-			public CurrentTimeStamp() : base("current_timestamp", NHibernateUtil.DateTime, true)
+			public CurrentTimeStamp() : base("current_timestamp", NHibernateUtil.LocalDateTime, true)
 			{
 			}
 
@@ -209,9 +186,8 @@ namespace NHibernate.Dialect
 
 		public override long TimestampResolutionInTicks
 		{
-			// Lousy documentation. Various mailing lists and articles seem to 
-			// indicate resolution of 0.1 ms, i.e. 1000 ticks.
-			get { return 1000L; }
+			// Resolution of 1 ms, i.e. 10000 ticks.
+			get { return 10000L; }
 		}
 
 		public override bool SupportsCurrentTimestampSelection
@@ -230,7 +206,7 @@ namespace NHibernate.Dialect
 		}
 
 		[Serializable]
-		private class PositionFunction : ISQLFunction
+		private class PositionFunction : ISQLFunction, ISQLFunctionExtended
 		{
 			// The cast is needed, at least in the case that ?3 is a named integer parameter, otherwise firebird will generate an error.  
 			// We have a unit test to cover this potential firebird bug.
@@ -239,10 +215,27 @@ namespace NHibernate.Dialect
 			private static readonly ISQLFunction LocateWith3Params = new SQLFunctionTemplate(NHibernateUtil.Int32,
 				"position(?1, ?2, cast(?3 as int))");
 
+			// Since v5.3
+			[Obsolete("Use GetReturnType method instead.")]
 			public IType ReturnType(IType columnType, IMapping mapping)
 			{
 				return NHibernateUtil.Int32;
 			}
+
+			/// <inheritdoc />
+			public IType GetReturnType(IEnumerable<IType> argumentTypes, IMapping mapping, bool throwOnError)
+			{
+				return NHibernateUtil.Int32;
+			}
+
+			/// <inheritdoc />
+			public IType GetEffectiveReturnType(IEnumerable<IType> argumentTypes, IMapping mapping, bool throwOnError)
+			{
+				return GetReturnType(argumentTypes, mapping, throwOnError);
+			}
+
+			/// <inheritdoc />
+			public string Name => "position";
 
 			public bool HasArguments
 			{
@@ -269,9 +262,133 @@ namespace NHibernate.Dialect
 			}
 		}
 
+		#region private static readonly string[] DialectKeywords = { ... }
+
+		private static readonly string[] DialectKeywords =
+		{
+			"action",
+			"active",
+			"admin",
+			"after",
+			"asc",
+			"ascending",
+			"auto",
+			"avg",
+			"base_name",
+			"before",
+			"blob sub_type 1",
+			"break",
+			"cache",
+			"cascade",
+			"check_point_length",
+			"coalesce",
+			"committed",
+			"computed",
+			"conditional",
+			"connection_id",
+			"containing",
+			"count",
+			"cstring",
+			"database",
+			"debug",
+			"desc",
+			"descending",
+			"descriptor",
+			"domain",
+			"double precision",
+			"entry_point",
+			"exception",
+			"extract",
+			"file",
+			"first",
+			"free_it",
+			"gdscode",
+			"gen_id",
+			"generator",
+			"group_commit_wait_time",
+			"inactive",
+			"index",
+			"input_type",
+			"isolation",
+			"key",
+			"last",
+			"length",
+			"level",
+			"lock",
+			"log_buffer_size",
+			"logfile",
+			"long",
+			"manual",
+			"max",
+			"maximum_segment",
+			"message",
+			"min",
+			"module_name",
+			"names",
+			"nullif",
+			"nulls",
+			"num_log_buffers",
+			"option",
+			"output_type",
+			"overflow",
+			"page",
+			"page_size",
+			"pages",
+			"password",
+			"plan",
+			"position",
+			"post_event",
+			"privileges",
+			"protected",
+			"raw_partitions",
+			"rdb$db_key",
+			"read",
+			"record_version",
+			"recreate",
+			"reserv",
+			"reserving",
+			"restrict",
+			"retain",
+			"returning_values",
+			"role",
+			"rows_affected",
+			"schema",
+			"segment",
+			"shadow",
+			"shared",
+			"singular",
+			"size",
+			"skip",
+			"snapshot",
+			"sort",
+			"sqlcode",
+			"stability",
+			"starting",
+			"starts",
+			"statistics",
+			"sub_type",
+			"substring",
+			"sum",
+			"suspend",
+			"transaction",
+			"transaction_id",
+			"type",
+			"uncommitted",
+			"upper",
+			"variable",
+			"view",
+			"wait",
+			"weekday",
+			"work",
+			"write",
+			"yearday",
+		};
+
+		#endregion
+
 		protected virtual void RegisterKeywords()
 		{
-			RegisterKeyword("date");
+			RegisterKeywords(DialectKeywords);
 		}
 
 		protected virtual void RegisterColumnTypes()
@@ -314,14 +431,23 @@ namespace NHibernate.Dialect
 		private void OverrideStandardHQLFunctions()
 		{
 			RegisterFunction("current_timestamp", new CurrentTimeStamp());
+			RegisterFunction("current_date", new NoArgSQLFunction("current_date", NHibernateUtil.LocalDate, false));
 			RegisterFunction("length", new StandardSafeSQLFunction("char_length", NHibernateUtil.Int64, 1));
 			RegisterFunction("nullif", new StandardSafeSQLFunction("nullif", 2));
 			RegisterFunction("lower", new StandardSafeSQLFunction("lower", NHibernateUtil.String, 1));
 			RegisterFunction("upper", new StandardSafeSQLFunction("upper", NHibernateUtil.String, 1));
-			RegisterFunction("mod", new StandardSafeSQLFunction("mod", NHibernateUtil.Double, 2));
+			// Modulo does not throw for decimal parameters but they are casted to int by Firebird, which produces unexpected results
+			RegisterFunction("mod", new ModulusFunction(false, false));
 			RegisterFunction("str", new SQLFunctionTemplate(NHibernateUtil.String, "cast(?1 as VARCHAR(255))"));
+			RegisterFunction("strguid", new StandardSQLFunction("uuid_to_char", NHibernateUtil.String));
 			RegisterFunction("sysdate", new CastedFunction("today", NHibernateUtil.Date));
 			RegisterFunction("date", new SQLFunctionTemplate(NHibernateUtil.Date, "cast(?1 as date)"));
+			RegisterFunction("new_uuid", new NoArgSQLFunction("gen_uuid", NHibernateUtil.Guid));
+			// Bitwise operations
+			RegisterFunction("band", new Function.BitwiseFunctionOperation("bin_and"));
+			RegisterFunction("bor", new Function.BitwiseFunctionOperation("bin_or"));
+			RegisterFunction("bxor", new Function.BitwiseFunctionOperation("bin_xor"));
+			RegisterFunction("bnot", new Function.BitwiseFunctionOperation("bin_not"));
 		}
 
 		private void RegisterFirebirdServerEmbeddedFunctions()
@@ -330,7 +456,7 @@ namespace NHibernate.Dialect
 			RegisterFunction("yesterday", new CastedFunction("yesterday", NHibernateUtil.Date));
 			RegisterFunction("tomorrow", new CastedFunction("tomorrow", NHibernateUtil.Date));
 			RegisterFunction("now", new CastedFunction("now", NHibernateUtil.DateTime));
-			RegisterFunction("iif", new StandardSafeSQLFunction("iif", 3));
+			RegisterFunction("iif", new IifSafeSQLFunction());
 			// New embedded functions in FB 2.0 (http://www.firebirdsql.org/rlsnotes20/rnfbtwo-str.html#str-string-func)
 			RegisterFunction("char_length", new StandardSafeSQLFunction("char_length", NHibernateUtil.Int64, 1));
 			RegisterFunction("bit_length", new StandardSafeSQLFunction("bit_length", NHibernateUtil.Int64, 1));
@@ -349,10 +475,8 @@ namespace NHibernate.Dialect
 		private void RegisterMathematicalFunctions()
 		{
 			RegisterFunction("abs", new StandardSQLFunction("abs", NHibernateUtil.Double));
-			RegisterFunction("bin_and", new StandardSQLFunction("bin_and", NHibernateUtil.Int32));
-			RegisterFunction("bin_or", new StandardSQLFunction("bin_or", NHibernateUtil.Int32));
-			RegisterFunction("bin_xor", new StandardSQLFunction("bin_xor", NHibernateUtil.Int32));
-			RegisterFunction("ceiling", new StandardSQLFunction("ceiling", NHibernateUtil.Double));
+			RegisterFunction("ceiling", new StandardSQLFunction("ceiling"));
+			RegisterFunction("ceil", new StandardSQLFunction("ceil"));
 			RegisterFunction("div", new StandardSQLFunction("div", NHibernateUtil.Double));
 			RegisterFunction("dpower", new StandardSQLFunction("dpower", NHibernateUtil.Double));
 			RegisterFunction("ln", new StandardSQLFunction("ln", NHibernateUtil.Double));
@@ -360,10 +484,12 @@ namespace NHibernate.Dialect
 			RegisterFunction("log10", new StandardSQLFunction("log10", NHibernateUtil.Double));
 			RegisterFunction("pi", new NoArgSQLFunction("pi", NHibernateUtil.Double));
 			RegisterFunction("rand", new NoArgSQLFunction("rand", NHibernateUtil.Double));
+			RegisterFunction("random", new NoArgSQLFunction("rand", NHibernateUtil.Double));
 			RegisterFunction("sign", new StandardSQLFunction("sign", NHibernateUtil.Int32));
 			RegisterFunction("sqtr", new StandardSQLFunction("sqtr", NHibernateUtil.Double));
-			RegisterFunction("truncate", new StandardSQLFunction("truncate"));
-			RegisterFunction("floor", new StandardSafeSQLFunction("floor", NHibernateUtil.Double, 1));
+			RegisterFunction("trunc", new StandardSQLFunction("trunc"));
+			RegisterFunction("truncate", new StandardSQLFunction("trunc"));
+			RegisterFunction("floor", new StandardSQLFunction("floor"));
 			RegisterFunction("round", new StandardSQLFunction("round"));
 		}
 
@@ -384,8 +510,10 @@ namespace NHibernate.Dialect
 
 		private void RegisterStringAndCharFunctions()
 		{
-			RegisterFunction("ascii_char", new StandardSQLFunction("ascii_char"));
-			RegisterFunction("ascii_val", new StandardSQLFunction("ascii_val", NHibernateUtil.Int16));
+			RegisterFunction("ascii_char", new StandardSQLFunction("ascii_char", NHibernateUtil.Character));
+			RegisterFunction("chr", new StandardSQLFunction("ascii_char", NHibernateUtil.Character));
+			RegisterFunction("ascii_val", new StandardSQLFunction("ascii_val", NHibernateUtil.Int32));
+			RegisterFunction("ascii", new StandardSQLFunction("ascii_val", NHibernateUtil.Int32));
 			RegisterFunction("lpad", new StandardSQLFunction("lpad"));
 			RegisterFunction("ltrim", new StandardSQLFunction("ltrim"));
 			RegisterFunction("sright", new StandardSQLFunction("sright"));
@@ -397,6 +525,7 @@ namespace NHibernate.Dialect
 			RegisterFunction("locate", new PositionFunction());
 			RegisterFunction("replace", new StandardSafeSQLFunction("replace", NHibernateUtil.String, 3));
 			RegisterFunction("left", new StandardSQLFunction("left"));
+			RegisterFunction("right", new StandardSQLFunction("right"));
 		}
 
 		private void RegisterBlobFunctions()
@@ -419,9 +548,23 @@ namespace NHibernate.Dialect
 			RegisterFunction("tanh", new StandardSQLFunction("tanh", NHibernateUtil.Double));
 		}
 
-		private static bool IsUnallowedDecimal(DbType dbType, int precision)
-		{
-			return dbType == DbType.Decimal && precision > MAX_DECIMAL_PRECISION;
-		}
+		// As of Firebird 2.5 documentation, limit is 30/31 (not all source are concordant), with some
+		// cases supporting more but considered as bugs and no more tolerated in v3.
+		// It seems it may be extended to 63 for Firebird v4.
+		/// <inheritdoc />
+		public override int MaxAliasLength => 30;
+
+		#region Informational metadata
+
+		/// <summary>
+		/// Does this dialect support distributed transaction?
+		/// </summary>
+		/// <remarks>
+		/// As of v2.5 and 3.0.2, fails rollback-ing changes when distributed: changes are instead persisted in database.
+		/// (With ADO .Net Provider 5.9.1)
+		/// </remarks>
+		public override bool SupportsDistributedTransactions => false;
+
+		#endregion
 	}
 }

@@ -9,7 +9,7 @@ namespace NHibernate.Test.Legacy
 	[TestFixture]
 	public class ABCProxyTest : TestCase
 	{
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get { return new string[] {"ABCProxy.hbm.xml"}; }
 		}
@@ -264,13 +264,9 @@ namespace NHibernate.Test.Legacy
 			s.Close();
 		}
 
-		[Test]
+		[Test, Ignore("ANTLR parser : Not supported ")]
 		public void OnoToOneComparing()
 		{
-			if (IsAntlrParser)
-			{
-				Assert.Ignore("ANTLR parser : Not supported ");
-			}
 			A a = new A();
 			E d1 = new E();
 			C1 c = new C1();

@@ -1,4 +1,6 @@
+using System;
 using System.Data;
+using System.Data.Common;
 using NHibernate.Engine.Query;
 using NHibernate.SqlTypes;
 
@@ -7,14 +9,21 @@ namespace NHibernate.Driver
 	/// <summary>
 	/// A NHibernate Driver for using the Oracle DataProvider.
 	/// </summary>
+	// Since v5.3
+	// Deprecated by Microsoft: https://docs.microsoft.com/en-us/dotnet/framework/data/adonet/oracle-and-adonet
+	[Obsolete("Use OracleManagedDataClientDriver or OracleDataClientDriver driver instead.")]
 	public class OracleClientDriver : ReflectionBasedDriver
 	{
 		private static readonly SqlType GuidSqlType = new SqlType(DbType.Binary, 16);
 
 		public OracleClientDriver() :
 			base(
+			"System.Data.OracleClient", 
+#if NETFX
+			"System.Data.OracleClient, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+#else
 			"System.Data.OracleClient",
-			"System.Data.OracleClient, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089", 
+#endif
 			"System.Data.OracleClient.OracleConnection", 
 			"System.Data.OracleClient.OracleCommand") { }
 
@@ -33,7 +42,7 @@ namespace NHibernate.Driver
 			get { return ":"; }
 		}
 
-		protected override void InitializeParameter(IDbDataParameter dbParam, string name, SqlType sqlType)
+		protected override void InitializeParameter(DbParameter dbParam, string name, SqlType sqlType)
 		{
 			if (sqlType.DbType == DbType.Guid)
 			{
@@ -45,7 +54,7 @@ namespace NHibernate.Driver
 			}
 		}
 
-		protected override void OnBeforePrepare(IDbCommand command)
+		protected override void OnBeforePrepare(DbCommand command)
 		{
 			base.OnBeforePrepare(command);
 

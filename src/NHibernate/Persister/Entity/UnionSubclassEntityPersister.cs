@@ -110,11 +110,13 @@ namespace NHibernate.Persister.Entity
 			int spacesSize = 1 + persistentClass.SynchronizedTables.Count;
 			spaces = new string[spacesSize];
 			spaces[0] = tableName;
-			IEnumerator<string> iSyncTab = persistentClass.SynchronizedTables.GetEnumerator();
-			for (int i = 1; i < spacesSize; i++)
+			using (var iSyncTab = persistentClass.SynchronizedTables.GetEnumerator())
 			{
-				iSyncTab.MoveNext();
-				spaces[i] = iSyncTab.Current;
+				for (var i = 1; i < spacesSize; i++)
+				{
+					iSyncTab.MoveNext();
+					spaces[i] = iSyncTab.Current;
+				}
 			}
 
 			subclassSpaces = persistentClass.SubclassTableClosureIterator
@@ -178,7 +180,7 @@ namespace NHibernate.Persister.Entity
 
 		public override string DiscriminatorSQLValue
 		{
-			get { return discriminatorSQLValue;}
+			get { return discriminatorSQLValue; }
 		}
 
 		public override object DiscriminatorValue
@@ -186,7 +188,7 @@ namespace NHibernate.Persister.Entity
 			get { return discriminatorValue; }
 		}
 
-		public string[] SubclassClosure
+		public override string[] SubclassClosure
 		{
 			get { return subclassClosure; }
 		}
@@ -230,7 +232,7 @@ namespace NHibernate.Persister.Entity
 			get { return constraintOrderedTableNames; }
 		}
 
-		public override string[][] ContraintOrderedTableKeyColumnClosure
+		public override string[][] ConstraintOrderedTableKeyColumnClosure
 		{
 			get { return constraintOrderedKeyColumnNames; }
 		}

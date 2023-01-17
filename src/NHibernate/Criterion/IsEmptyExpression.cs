@@ -22,5 +22,10 @@ namespace NHibernate.Criterion
 		{
 			return null;
 		}
+
+		public override string ToHqlString()
+		{
+			return string.Empty;
+		}
 	}
 }

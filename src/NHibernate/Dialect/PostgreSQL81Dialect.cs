@@ -1,5 +1,5 @@
-using System;
 using System.Data;
+using NHibernate.Dialect.Function;
 using NHibernate.SqlCommand;
 
 namespace NHibernate.Dialect
@@ -34,6 +34,20 @@ namespace NHibernate.Dialect
 	/// <seealso cref="PostgreSQLDialect" />
 	public class PostgreSQL81Dialect : PostgreSQLDialect
 	{
+		protected override void RegisterDateTimeTypeMappings()
+		{
+			base.RegisterDateTimeTypeMappings();
+			RegisterColumnType(DbType.DateTime, 6, "timestamp($s)");
+			RegisterColumnType(DbType.Time, 6, "time($s)");
+			// Not overriding default scale: Posgres doc writes it means "no explicit limit", so max of what it can support,
+			// which suits our needs.
+
+			// timezone seems not available prior to version 8.0
+			RegisterFunction(
+				"current_utctimestamp",
+				new SQLFunctionTemplate(NHibernateUtil.UtcDateTime, "timezone('UTC', current_timestamp)"));
+		}
+
 		public override string ForUpdateNowaitString
 		{
 			get { return " for update nowait"; }
@@ -86,7 +100,7 @@ namespace NHibernate.Dialect
 		}
 
 		/// <summary>
-		/// PostgreSQL 8.1 and above defined the fuction <c>lastval()</c> that returns the
+		/// PostgreSQL 8.1 and above defined the function <c>lastval()</c> that returns the
 		/// value of the last sequence that <c>nextval()</c> was used on in the current session.
 		/// Call <c>lastval()</c> if <c>nextval()</c> has not yet been called in the current
 		/// session throw an exception.
@@ -101,9 +115,21 @@ namespace NHibernate.Dialect
 			return insertSql.Append("; " + IdentitySelectString);
 		}
 
+		public override SqlString AppendIdentitySelectToInsert(SqlString insertString, string identifierColumnName)
+		{
+			return insertString.Append(" returning ", identifierColumnName);
+		}
+
 		public override bool SupportsInsertSelectIdentity
 		{
 			get { return true; }
 		}
+
+		/// <inheritdoc />
+		public override bool SupportsDateTimeScale => true;
+
+		// Said to be 63 bytes at least since v8.
+		/// <inheritdoc />
+		public override int MaxAliasLength => 63;
 	}
 }

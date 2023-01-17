@@ -7,6 +7,7 @@ using NUnit.Framework;
 
 namespace NHibernate.Test.UtilityTest
 {
+	[TestFixture]
 	public class ReflectionHelperIsMethodOfTests
 	{
 		[Test]
@@ -18,51 +19,50 @@ namespace NHibernate.Test.UtilityTest
 		[Test]
 		public void WhenNullTypeThenThrows()
 		{
-			var methodInfo = ReflectionHelper.GetMethodDefinition<List<int>>(t => t.Contains(5));
+			var methodInfo = ReflectHelper.GetMethodDefinition<List<int>>(t => t.Contains(5));
 			Assert.Throws<ArgumentNullException>(() => methodInfo.IsMethodOf(null));
 		}
 
 		[Test]
 		public void WhenDeclaringTypeMatchThenTrue()
 		{
-			Assert.That(ReflectionHelper.GetMethodDefinition<List<int>>(t => t.Contains(5)).IsMethodOf(typeof(List<int>)), Is.True);
+			Assert.That(ReflectHelper.GetMethodDefinition<List<int>>(t => t.Contains(5)).IsMethodOf(typeof(List<int>)), Is.True);
 		}
 
 		private class MyCollection: List<int>
 		{
-			
 		}
 
 		[Test]
 		public void WhenCustomTypeMatchThenTrue()
 		{
-			Assert.That(ReflectionHelper.GetMethodDefinition<MyCollection>(t => t.Contains(5)).IsMethodOf(typeof(List<int>)), Is.True);
+			Assert.That(ReflectHelper.GetMethodDefinition<MyCollection>(t => t.Contains(5)).IsMethodOf(typeof(List<int>)), Is.True);
 		}
 
 		[Test]
 		public void WhenTypeIsGenericDefinitionAndMatchThenTrue()
 		{
-			Assert.That(ReflectionHelper.GetMethodDefinition<List<int>>(t => t.Contains(5)).IsMethodOf(typeof(List<>)), Is.True);
+			Assert.That(ReflectHelper.GetMethodDefinition<List<int>>(t => t.Contains(5)).IsMethodOf(typeof(List<>)), Is.True);
 		}
 
 		[Test]
 		public void WhenTypeIsGenericImplementedInterfaceAndMatchThenTrue()
 		{
-			var containsMethodDefinition = ReflectionHelper.GetMethodDefinition<List<int>>(t => t.Contains(5));
+			var containsMethodDefinition = ReflectHelper.GetMethodDefinition<List<int>>(t => t.Contains(5));
 			Assert.That(containsMethodDefinition.IsMethodOf(typeof(ICollection<int>)), Is.True);
 		}
 
 		[Test]
 		public void WhenTypeIsGenericImplementedInterfaceAndMatchGenericInterfaceDefinitionThenTrue()
 		{
-			var containsMethodDefinition = ReflectionHelper.GetMethodDefinition<List<int>>(t => t.Contains(5));
+			var containsMethodDefinition = ReflectHelper.GetMethodDefinition<List<int>>(t => t.Contains(5));
 			Assert.That(containsMethodDefinition.IsMethodOf(typeof(ICollection<>)), Is.True);
 		}
 
 		[Test]
 		public void WhenNoMatchThenFalse()
 		{
-			Assert.That(ReflectionHelper.GetMethodDefinition<List<int>>(t => t.Contains(5)).IsMethodOf(typeof(IEnumerable<>)), Is.False);
+			Assert.That(ReflectHelper.GetMethodDefinition<List<int>>(t => t.Contains(5)).IsMethodOf(typeof(IEnumerable<>)), Is.False);
 		}
 
 		private abstract class MyAbstractClass<T>
@@ -72,20 +72,20 @@ namespace NHibernate.Test.UtilityTest
 
 		private class MyClass : MyAbstractClass<int>
 		{
-			public override int MyMethod() {return 0;}
+			public override int MyMethod() {return 0; }
 		}
 
 		[Test]
 		public void WhenTypeIsGenericImplementedAbstractAndMatchThenTrue()
 		{
-			var containsMethodDefinition = ReflectionHelper.GetMethodDefinition<MyClass>(t => t.MyMethod());
+			var containsMethodDefinition = ReflectHelper.GetMethodDefinition<MyClass>(t => t.MyMethod());
 			Assert.That(containsMethodDefinition.IsMethodOf(typeof(MyAbstractClass<int>)), Is.True);
 		}
 
 		[Test]
 		public void WhenTypeIsGenericImplementedAbstractAndMatchGenericInterfaceDefinitionThenTrue()
 		{
-			var containsMethodDefinition = ReflectionHelper.GetMethodDefinition<MyClass>(t => t.MyMethod());
+			var containsMethodDefinition = ReflectHelper.GetMethodDefinition<MyClass>(t => t.MyMethod());
 			Assert.That(containsMethodDefinition.IsMethodOf(typeof(MyAbstractClass<>)), Is.True);
 		}
 	}

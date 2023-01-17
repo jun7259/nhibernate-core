@@ -15,26 +15,19 @@ namespace NHibernate.Test.NHSpecificTest.NH1093
 			configuration.SetProperty(Environment.UseSecondLevelCache, "true");
 		}
 
-		protected override string CacheConcurrencyStrategy
-		{
-			get { return null; }
-		}
-
 		private void Cleanup()
 		{
-			using (ISession s = sessions.OpenSession())
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
 			{
-				using (s.BeginTransaction())
-				{
-					s.CreateQuery("delete from SimpleCached").ExecuteUpdate();
-					s.Transaction.Commit();
-				}
+				s.CreateQuery("delete from SimpleCached").ExecuteUpdate();
+				t.Commit();
 			}
 		}
 
 		private void FillDb()
 		{
-			using (ISession s = sessions.OpenSession())
+			using (ISession s = OpenSession())
 			{
 				using (ITransaction tx = s.BeginTransaction())
 				{
@@ -80,13 +73,14 @@ namespace NHibernate.Test.NHSpecificTest.NH1093
 			}
 		}
 
-		protected override void BuildSessionFactory()
+		protected override DebugSessionFactory BuildSessionFactory()
 		{
 			// Without configured cache, should log warn.
-			using (var ls = new LogSpy(LogManager.GetLogger("NHibernate"), Level.Warn))
+			using (var ls = new LogSpy(LogManager.GetLogger(typeof(Fixture).Assembly, "NHibernate"), Level.Warn))
 			{
-				base.BuildSessionFactory();
-				Assert.That(ls.GetWholeLog(), Is.StringContaining("Fake cache used"));
+				var factory = base.BuildSessionFactory();
+				Assert.That(ls.GetWholeLog(), Does.Contain("Fake cache used"));
+				return factory;
 			}
 		}
 	}

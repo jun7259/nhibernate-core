@@ -1,11 +1,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
+using System.Linq;
 using NHibernate.Engine;
 using NHibernate.Event;
-using NHibernate.Hql;
 using NHibernate.Hql.Ast.ANTLR;
 using NHibernate.Hql.Ast.ANTLR.Tree;
 using NHibernate.Impl;
@@ -21,13 +21,12 @@ using IQueryable = NHibernate.Persister.Entity.IQueryable;
 namespace NHibernate.Loader.Hql
 {
 	[CLSCompliant(false)]
-	public class QueryLoader : BasicLoader
+	public partial class QueryLoader : BasicLoader
 	{
 		private readonly QueryTranslatorImpl _queryTranslator;
 
 		private bool _hasScalars;
 		private string[][] _scalarColumnNames;
-		private IType[] _queryReturnTypes;
 		private IResultTransformer _selectNewTransformer;
 		private string[] _queryReturnAliases;
 		private IQueryableCollection[] _collectionPersisters;
@@ -35,6 +34,7 @@ namespace NHibernate.Loader.Hql
 		private string[] _collectionSuffixes;
 		private IQueryable[] _entityPersisters;
 		private bool[] _entityEagerPropertyFetches;
+		private HashSet<string>[] _entityFetchLazyProperties;
 		private string[] _entityAliases;
 		private string[] _sqlAliases;
 		private string[] _sqlAliasSuffixes;
@@ -44,6 +44,8 @@ namespace NHibernate.Loader.Hql
 		private readonly NullableDictionary<string, string> _sqlAliasByEntityAlias = new NullableDictionary<string, string>();
 		private int _selectLength;
 		private LockMode[] _defaultLockModes;
+		private ISet<ICollectionPersister> _uncacheableCollectionPersisters;
+		private IReadOnlyDictionary<int, int> _entityByResultTypeDic;
 
 		public QueryLoader(QueryTranslatorImpl queryTranslator, ISessionFactoryImplementor factory, SelectClause selectClause)
 			: base(factory)
@@ -71,7 +73,7 @@ namespace NHibernate.Loader.Hql
 			// we are given a map of user-alias -> lock mode
 			// create a new map of sql-alias -> lock mode
 			var aliasedLockModes = new Dictionary<string, LockMode>();
-			Dictionary<string, string[]> keyColumnNames = dialect.ForUpdateOfColumns ? new Dictionary<string, string[]>() : null;
+			Dictionary<string, string[]> keyColumnNames = dialect.UsesColumnsWithForUpdateOf ? new Dictionary<string, string[]>() : null;
 
 			foreach (var entry in lockModes)
 			{
@@ -107,6 +109,11 @@ namespace NHibernate.Loader.Hql
 			get { return _sqlAliases; }
 		}
 
+		internal override bool IsCacheable(QueryParameters queryParameters)
+		{
+			return IsCacheable(queryParameters, _queryTranslator.SupportsQueryCache, _queryTranslator.Persisters);
+		}
+
 		protected override int[] CollectionOwners
 		{
 			get { return _collectionOwners; }
@@ -115,6 +122,11 @@ namespace NHibernate.Loader.Hql
 		protected override bool[] EntityEagerPropertyFetches
 		{
 			get { return _entityEagerPropertyFetches; }
+		}
+
+		protected override ISet<string>[] EntityFetchLazyProperties
+		{
+			get { return _entityFetchLazyProperties; }
 		}
 
 		protected override EntityType[] OwnerAssociationTypes
@@ -191,7 +203,7 @@ namespace NHibernate.Loader.Hql
 			get { return _collectionSuffixes; }
 		}
 
-		protected override ICollectionPersister[] CollectionPersisters
+		protected internal override ICollectionPersister[] CollectionPersisters
 		{
 			get { return _collectionPersisters; }
 		}
@@ -199,13 +211,14 @@ namespace NHibernate.Loader.Hql
 		private void Initialize(SelectClause selectClause)
 		{
 			IList<FromElement> fromElementList = selectClause.FromElementsForLoad;
+			_entityByResultTypeDic = selectClause.EntityByResultTypeDic;
 
 			_hasScalars = selectClause.IsScalarSelect;
 			_scalarColumnNames = selectClause.ColumnNames;
 			//sqlResultTypes = selectClause.getSqlResultTypes();
-			_queryReturnTypes = selectClause.QueryReturnTypes;
+			ResultTypes = selectClause.QueryReturnTypes;
 
-			_selectNewTransformer = HolderInstantiator.CreateSelectNewTransformer(selectClause.Constructor, selectClause.IsMap, selectClause.IsList);
+			_selectNewTransformer = GetSelectNewTransformer(selectClause);
 			_queryReturnAliases = selectClause.QueryReturnAliases;
 
 			IList<FromElement> collectionFromElements = selectClause.CollectionFromElements;
@@ -230,6 +243,7 @@ namespace NHibernate.Loader.Hql
 			int size = fromElementList.Count;
 			_entityPersisters = new IQueryable[size];
 			_entityEagerPropertyFetches = new bool[size];
+			_entityFetchLazyProperties = new HashSet<string>[size];
 			_entityAliases = new String[size];
 			_sqlAliases = new String[size];
 			_sqlAliasSuffixes = new String[size];
@@ -248,11 +262,13 @@ namespace NHibernate.Loader.Hql
 				}
 
 				_entityEagerPropertyFetches[i] = element.IsAllPropertyFetch;
-				_sqlAliases[i] = element.TableAlias;
+				_entityFetchLazyProperties[i] = element.FetchLazyProperties != null
+					? new HashSet<string>(element.FetchLazyProperties)
+					: null;
+				_sqlAliases[i] = element.ParentFromElement?.TableAlias ?? element.TableAlias;
 				_entityAliases[i] = element.ClassAlias;
 				_sqlAliasByEntityAlias.Add(_entityAliases[i], _sqlAliases[i]);
-				// TODO should we just collect these like with the collections above?
-				_sqlAliasSuffixes[i] = (size == 1) ? "" : i + "_";
+				_sqlAliasSuffixes[i] = element.EntitySuffix;
 				//			sqlAliasSuffixes[i] = element.getColumnAliasSuffix();
 				_includeInSelect[i] = !element.IsFetch;
 				if (_includeInSelect[i])
@@ -269,38 +285,34 @@ namespace NHibernate.Loader.Hql
 					}
 					else if (element.DataType.IsEntityType)
 					{
-						var entityType = (EntityType) element.DataType;
-						if (entityType.IsOneToOne)
-						{
-							_owners[i] = fromElementList.IndexOf(element.Origin);
-						}
-						_ownerAssociationTypes[i] = entityType;
+						_owners[i] = fromElementList.IndexOf(element.Origin);
+						_ownerAssociationTypes[i] = (EntityType) element.DataType;
 					}
 				}
 			}
 
 			//NONE, because its the requested lock mode, not the actual! 
 			_defaultLockModes = ArrayHelper.Fill(LockMode.None, size);
+			_uncacheableCollectionPersisters = _queryTranslator.UncacheableCollectionPersisters;
+			CachePersistersWithCollections(ArrayHelper.IndexesOf(_includeInSelect, true));
 		}
 
 		public IList List(ISessionImplementor session, QueryParameters queryParameters)
 		{
 			CheckQuery(queryParameters);
-			return List(session, queryParameters, _queryTranslator.QuerySpaces, _queryReturnTypes);
+			return List(session, queryParameters, _queryTranslator.QuerySpaces);
 		}
 
 		public override IList GetResultList(IList results, IResultTransformer resultTransformer)
 		{
 			// meant to handle dynamic instantiation queries...
-			HolderInstantiator holderInstantiator = HolderInstantiator.GetHolderInstantiator(_selectNewTransformer,
-																							 resultTransformer,
-																							 _queryReturnAliases);
-			if (holderInstantiator.IsRequired)
+			var transformer = _selectNewTransformer ?? resultTransformer;
+			if (transformer != null)
 			{
 				for (int i = 0; i < results.Count; i++)
 				{
-					var row = (Object[]) results[i];
-					Object result = holderInstantiator.Instantiate(row);
+					var row = (object[]) results[i];
+					object result = transformer.TransformTuple(row, _queryReturnAliases);
 					results[i] = result;
 				}
 
@@ -319,12 +331,17 @@ namespace NHibernate.Loader.Hql
 			}
 		}
 
-		protected override IResultTransformer ResolveResultTransformer(IResultTransformer resultTransformer)
+		protected override bool IsCollectionPersisterCacheable(ICollectionPersister collectionPersister)
 		{
-			return HolderInstantiator.ResolveResultTransformer(_selectNewTransformer, resultTransformer);
+			return !_uncacheableCollectionPersisters.Contains(collectionPersister);
 		}
 
-		protected override object GetResultColumnOrRow(object[] row, IResultTransformer resultTransformer, IDataReader rs,
+		protected override IResultTransformer ResolveResultTransformer(IResultTransformer resultTransformer)
+		{
+			return _selectNewTransformer ?? resultTransformer;
+		}
+
+		protected override object GetResultColumnOrRow(object[] row, IResultTransformer resultTransformer, DbDataReader rs,
 													   ISessionImplementor session)
 		{
 			Object[] resultRow = GetResultRow(row, rs, session);
@@ -335,18 +352,20 @@ namespace NHibernate.Loader.Hql
 			       );
 		}
 
-		protected override object[] GetResultRow(object[] row, IDataReader rs, ISessionImplementor session)
+		protected override object[] GetResultRow(object[] row, DbDataReader rs, ISessionImplementor session)
 		{
 			object[] resultRow;
 
 			if (_hasScalars)
 			{
 				string[][] scalarColumns = _scalarColumnNames;
-				int queryCols = _queryReturnTypes.Length;
+				int queryCols = ResultTypes.Length;
 				resultRow = new object[queryCols];
 				for (int i = 0; i < queryCols; i++)
 				{
-					resultRow[i] = _queryReturnTypes[i].NullSafeGet(rs, scalarColumns[i], session, null);
+					resultRow[i] = _entityByResultTypeDic.TryGetValue(i, out var rowIndex)
+						? row[rowIndex]
+						: ResultTypes[i].NullSafeGet(rs, scalarColumns[i], session, null);
 				}
 			}
 			else
@@ -401,47 +420,41 @@ namespace NHibernate.Loader.Hql
 				bool[] includeInResultTuple = _includeInSelect;
 				if (_hasScalars)
 				{
-					includeInResultTuple = new bool[_queryReturnTypes.Length];
+					includeInResultTuple = new bool[ResultTypes.Length];
 					ArrayHelper.Fill(includeInResultTuple, true);
 				}
 				return includeInResultTuple;
 			}
 		}
 
-		public IType[] ReturnTypes
-		{
-			get { return _queryReturnTypes; }
-		}
+		[Obsolete("Please use ResultTypes instead")]
+		public IType[] ReturnTypes => ResultTypes;
 
 		internal IEnumerable GetEnumerable(QueryParameters queryParameters, IEventSource session)
 		{
 			CheckQuery(queryParameters);
-			bool statsEnabled = session.Factory.Statistics.IsStatisticsEnabled;
-
-			var stopWath = new Stopwatch();
-			if (statsEnabled)
+			Stopwatch stopWatch = null;
+			if (session.Factory.Statistics.IsStatisticsEnabled)
 			{
-				stopWath.Start();
+				stopWatch = Stopwatch.StartNew();
 			}
 
-			IDbCommand cmd = PrepareQueryCommand(queryParameters, false, session);
+			var cmd = PrepareQueryCommand(queryParameters, false, session);
 
-			// This IDataReader is disposed of in EnumerableImpl.Dispose
-			IDataReader rs = GetResultSet(cmd, queryParameters.HasAutoDiscoverScalarTypes, false, queryParameters.RowSelection, session);
+			// This DbDataReader is disposed of in EnumerableImpl.Dispose
+			var rs = GetResultSet(cmd, queryParameters, session, null);
 
-			HolderInstantiator hi = 
-				HolderInstantiator.GetHolderInstantiator(_selectNewTransformer, queryParameters.ResultTransformer, _queryReturnAliases);
-
+			var resultTransformer = _selectNewTransformer ?? queryParameters.ResultTransformer;
 			IEnumerable result = 
-				new EnumerableImpl(rs, cmd, session, queryParameters.IsReadOnly(session), _queryTranslator.ReturnTypes, _queryTranslator.GetColumnNames(), queryParameters.RowSelection, hi);
+				new EnumerableImpl(rs, cmd, session, queryParameters.IsReadOnly(session), _queryTranslator.ReturnTypes, _queryTranslator.GetColumnNames(), queryParameters.RowSelection, resultTransformer, _queryReturnAliases);
 
-			if (statsEnabled)
+			if (stopWatch != null)
 			{
-				stopWath.Stop();
-				session.Factory.StatisticsImplementor.QueryExecuted("HQL: " + _queryTranslator.QueryString, 0, stopWath.Elapsed);
+				stopWatch.Stop();
+				session.Factory.StatisticsImplementor.QueryExecuted("HQL: " + _queryTranslator.QueryString, 0, stopWatch.Elapsed);
 				// NH: Different behavior (H3.2 use QueryLoader in AST parser) we need statistic for orginal query too.
 				// probably we have a bug some where else for statistic RowCount
-				session.Factory.StatisticsImplementor.QueryExecuted(QueryIdentifier, 0, stopWath.Elapsed);
+				session.Factory.StatisticsImplementor.QueryExecuted(QueryIdentifier, 0, stopWatch.Elapsed);
 			}
 			return result;
 		}
@@ -454,6 +467,27 @@ namespace NHibernate.Loader.Hql
 		protected override IEnumerable<IParameterSpecification> GetParameterSpecifications()
 		{
 			return _queryTranslator.CollectedParameterSpecifications;
+		}
+
+		private static IResultTransformer GetSelectNewTransformer(SelectClause selectClause)
+		{
+			var constructor = selectClause.Constructor;
+			if (constructor != null)
+			{
+				return new AliasToBeanConstructorResultTransformer(constructor);
+			}
+
+			if (selectClause.IsMap)
+			{
+				return Transformers.AliasToEntityMap;
+			}
+
+			if (selectClause.IsList)
+			{
+				return Transformers.ToList;
+			}
+
+			return null;
 		}
 	}
 }

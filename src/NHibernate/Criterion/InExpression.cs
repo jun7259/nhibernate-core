@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using NHibernate.Engine;
@@ -9,200 +8,181 @@ using NHibernate.Util;
 
 namespace NHibernate.Criterion
 {
-    /// <summary>
-    /// An <see cref="ICriterion"/> that constrains the property
-    /// to a specified list of values.
-    /// </summary>
-    /// <remarks>
-    /// InExpression - should only be used with a Single Value column - no multicolumn properties...
-    /// </remarks>
-    [Serializable]
-    public class InExpression : AbstractCriterion
-    {
-        private readonly IProjection _projection;
-        private readonly string _propertyName;
-        private object[] _values;
+	/// <summary>
+	/// An <see cref="ICriterion"/> that constrains the property
+	/// to a specified list of values.
+	/// </summary>
+	[Serializable]
+	public class InExpression : AbstractCriterion
+	{
+		private readonly IProjection _projection;
+		private readonly string _propertyName;
+		private object[] _values;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="InExpression"/> class.
-        /// </summary>
-        /// <param name="projection">The projection.</param>
-        /// <param name="values">The _values.</param>
-        public InExpression(IProjection projection, object[] values)
-        {
-            _projection = projection;
-            if (values.Length == 0)
-            {
-                _values = values;
-            }
-            else
-            {
-                //р把计ノ,﹃癬ㄓ
-                _values = new object[] { StringHelper.Join(",", values) };
-            }
-        }
+		/// <summary>
+		/// Initializes a new instance of the <see cref="InExpression"/> class.
+		/// </summary>
+		/// <param name="projection">The projection.</param>
+		/// <param name="values">The _values.</param>
+		public InExpression(IProjection projection, object[] values)
+		{
+			_projection = projection;
+			_values = values;
+		}
 
-        public InExpression(string propertyName, object[] values)
-        {
-            _propertyName = propertyName;
-            if (values.Length == 0)
-            {
-                _values = values;
-            }
-            else
-            {
-                //р把计ノ,﹃癬ㄓ
-                _values = new object[] { StringHelper.Join(",", values) };
-            }
-        }
+		public InExpression(string propertyName, object[] values)
+		{
+			_propertyName = propertyName;
+			_values = values;
+		}
 
-        public override IProjection[] GetProjections()
-        {
-            if (_projection != null)
-            {
-                return new IProjection[] { _projection };
-            }
-            return null;
-        }
+		public override IProjection[] GetProjections()
+		{
+			if (_projection != null)
+			{
+				return new IProjection[] { _projection };
+			}
+			return null;
+		}
 
-        public override SqlString ToSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery, IDictionary<string, IFilter> enabledFilters)
-        {
-            if (_projection == null)
-            {
-                AssertPropertyIsNotCollection(criteriaQuery, criteria);
-            }
+		public override SqlString ToSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery)
+		{
+			if (_projection == null)
+			{
+				AssertPropertyIsNotCollection(criteriaQuery, criteria);
+			}
 
-            if (_values.Length == 0)
-            {
-                // "something in ()" is always false
-                return new SqlString("1=0");
-            }
+			if (_values.Length == 0)
+			{
+				// "something in ()" is always false
+				return new SqlString("1=0");
+			}
 
-            //TODO: add default capacity
-            SqlStringBuilder result = new SqlStringBuilder();
-            SqlString[] columnNames =
-                CriterionUtil.GetColumnNames(_propertyName, _projection, criteriaQuery, criteria, enabledFilters);
+			SqlString[] columns = CriterionUtil.GetColumnNames(_propertyName, _projection, criteriaQuery, criteria);
 
-            // Generate SqlString of the form:
-            // columnName1 in (values) and columnName2 in (values) and ...
-            Parameter[] parameters = GetParameterTypedValues(criteria, criteriaQuery).SelectMany(t => criteriaQuery.NewQueryParameter(t)).ToArray();
+			var list = new List<Parameter>(columns.Length * Values.Length);
+			foreach (var typedValue in GetParameterTypedValues(criteria, criteriaQuery))
+			{
+				//Must be executed after CriterionUtil.GetColumnNames (as it might add _projection parameters to criteria)
+				list.AddRange(criteriaQuery.NewQueryParameter(typedValue));
+			}
 
-            for (int columnIndex = 0; columnIndex < columnNames.Length; columnIndex++)
-            {
-                SqlString columnName = columnNames[columnIndex];
+			return GetSqlString(columns, Values.Length, list, criteriaQuery.Factory.Dialect);
+		}
 
-                if (columnIndex > 0)
-                {
-                    result.Add(" and ");
-                }
+		internal static SqlString GetSqlString(object[] columns, int paramsCount, IReadOnlyList<Parameter> parameters, Dialect.Dialect dialect)
+		{
+			var bogusParam = Parameter.Placeholder;
+			var sqlString = GetSqlString(columns, paramsCount, bogusParam, dialect);
+			sqlString.SubstituteBogusParameters(parameters, bogusParam);
+			return sqlString;
+		}
 
-                result
-                    .Add(columnName)
-                    //эノfnSplitStringsち澄把计
-                    .Add(" in ( select Item from fnSplitStrings(");
+		private static SqlString GetSqlString(object[] columns, int paramsCount, Parameter bogusParam, Dialect.Dialect dialect)
+		{
+			if (columns.Length <= 1 || dialect.SupportsRowValueConstructorSyntaxInInList)
+			{
+				var wrapInParens = columns.Length > 1;
+				const string comaSeparator = ", ";
+				var singleValueParam = SqlStringHelper.Repeat(new SqlString(bogusParam), columns.Length, comaSeparator, wrapInParens);
 
-                for (int i = 0; i < _values.Length; i++)
-                {
-                	if (i > 0)
-                	{
-                		result.Add(StringHelper.CommaSpace);
-                	}
-                	result.Add(parameters[i]);
-                }
+				var parameters = SqlStringHelper.Repeat(singleValueParam, paramsCount, comaSeparator, wrapInParens: false);
 
-                result.Add(",',')");
-                result.Add(")");
-            }
+				//single column: col1 in (?, ?)
+				//multi column:  (col1, col2) in ((?, ?), (?, ?))
+				return new SqlString(
+					wrapInParens ? StringHelper.OpenParen : string.Empty,
+					SqlStringHelper.JoinParts(comaSeparator, columns),
+					wrapInParens ? StringHelper.ClosedParen : string.Empty,
+					" in (",
+					parameters,
+					")");
+			}
 
-            return result.ToSqlString();
-        }
+			//((col1 = ? and col2 = ?) or (col1 = ? and col2 = ?))
+			var cols = new SqlString(
+				" ( ",
+				SqlStringHelper.Join(new SqlString(" = ", bogusParam, " and "), columns),
+				"= ",
+				bogusParam,
+				" ) ");
+			cols = SqlStringHelper.Repeat(cols, paramsCount, " or ", wrapInParens: paramsCount > 1);
+			return cols;
+		}
 
-        private void AssertPropertyIsNotCollection(ICriteriaQuery criteriaQuery, ICriteria criteria)
-        {
-            IType type = criteriaQuery.GetTypeUsingProjection(criteria, _propertyName);
-            if (type.IsCollectionType)
-            {
-                throw new QueryException("Cannot use collections with InExpression");
-            }
-        }
+		private void AssertPropertyIsNotCollection(ICriteriaQuery criteriaQuery, ICriteria criteria)
+		{
+			IType type = criteriaQuery.GetTypeUsingProjection(criteria, _propertyName);
+			if (type.IsCollectionType)
+			{
+				throw new QueryException("Cannot use collections with InExpression");
+			}
+		}
 
-        public override TypedValue[] GetTypedValues(ICriteria criteria, ICriteriaQuery criteriaQuery)
-        {
-            var list = GetParameterTypedValues(criteria, criteriaQuery);
+		public override TypedValue[] GetTypedValues(ICriteria criteria, ICriteriaQuery criteriaQuery)
+		{
+			var list = GetParameterTypedValues(criteria, criteriaQuery);
 
-            if (_projection != null)
-                list.InsertRange(0, _projection.GetTypedValues(criteria, criteriaQuery));
+			if (_projection != null)
+				list.InsertRange(0, _projection.GetTypedValues(criteria, criteriaQuery));
 
-            return list.ToArray();
-        }
+			return list.ToArray();
+		}
 
-        private List<TypedValue> GetParameterTypedValues(ICriteria criteria, ICriteriaQuery criteriaQuery)
-        {
-            IType type = GetElementType(criteria, criteriaQuery);
+		private List<TypedValue> GetParameterTypedValues(ICriteria criteria, ICriteriaQuery criteriaQuery)
+		{
+			IType type = GetElementType(criteria, criteriaQuery);
 
-            if (type.IsComponentType)
-            {
-                List<TypedValue> list = new List<TypedValue>();
-                IAbstractComponentType actype = (IAbstractComponentType)type;
-                IType[] types = actype.Subtypes;
+			if (!type.IsComponentType)
+			{
+				return _values.ToList(v => new TypedValue(type, v, false));
+			}
 
-                for (int i = 0; i < types.Length; i++)
-                {
-                    for (int j = 0; j < _values.Length; j++)
-                    {
-                        object subval = _values[j] == null
-                                            ? null
-                                            : actype.GetPropertyValues(_values[j], EntityMode.Poco)[i];
-                        list.Add(new TypedValue(types[i], subval, EntityMode.Poco));
-                    }
-                }
+			List<TypedValue> list = new List<TypedValue>();
+			IAbstractComponentType actype = (IAbstractComponentType) type;
+			var types = actype.Subtypes;
+			foreach (var value in _values)
+			{
+				var propertyValues = value != null ? actype.GetPropertyValues(value) : null;
+				for (int ti = 0; ti < types.Length; ti++)
+				{
+					list.Add(new TypedValue(types[ti], propertyValues?[ti], false));
+				}
+			}
 
-                return list;
-            }
-            else
-            {
-                return _values.Select(v => new TypedValue(type, v, EntityMode.Poco)).ToList();
-            }
-        }
+			return list;
+		}
 
-        /// <summary>
-        /// Determine the type of the elements in the IN clause.
-        /// </summary>
-        private IType GetElementType(ICriteria criteria, ICriteriaQuery criteriaQuery)
-        {
-            if (_projection == null)
-                //return criteriaQuery.GetTypeUsingProjection(criteria, _propertyName);
-            {
-                //把计㏕﹚肚String篈
-                if (this._values[0].ToString().Length > 4000)
-                {
-                    return NHibernateUtil.StringClob;
-                }
-                return NHibernateUtil.String;
-            }
+		/// <summary>
+		/// Determine the type of the elements in the IN clause.
+		/// </summary>
+		private IType GetElementType(ICriteria criteria, ICriteriaQuery criteriaQuery)
+		{
+			if (_projection == null)
+				return criteriaQuery.GetTypeUsingProjection(criteria, _propertyName);
 
-            IType[] types = _projection.GetTypes(criteria, criteriaQuery);
-            if (types.Length != 1)
-                throw new QueryException("Cannot use projections that return more than a single column with InExpression");
+			IType[] types = _projection.GetTypes(criteria, criteriaQuery);
+			if (types.Length != 1)
+				throw new QueryException("Cannot use projections that return more than a single column with InExpression");
 
-            return types[0];
-        }
+			return types[0];
+		}
 
-        public object[] Values
-        {
-            get { return _values; }
-            protected set { _values = value; }
-        }
+		public object[] Values
+		{
+			get { return _values; }
+			protected set { _values = value; }
+		}
 
-        public override string ToString()
-        {
-            return (_projection ?? (object)_propertyName) + " in (" + StringHelper.ToString(_values) + ')';
-        }
+		public override string ToString()
+		{
+			return (_projection ?? (object) _propertyName) + " in (" + StringHelper.ToString(_values) + ')';
+		}
 
-        public override string ToHqlString()
-        {
-            string str = string.Join(",", _values.Select(x => " ? ").ToArray());
-            return (_projection ?? (object)_propertyName) + " in ( " + str + " )";
-        }
-    }
+		public override string ToHqlString()
+		{
+			string str = string.Join(",", _values.Select(x => " ? ").ToArray());
+			return (_projection ?? (object) _propertyName) + " in ( " + str + " )";
+		}
+	}
 }

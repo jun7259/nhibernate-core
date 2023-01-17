@@ -1,8 +1,9 @@
 using System.Collections;
 using System.Linq;
+using NHibernate.Criterion;
+using NHibernate.Multi;
 using NHibernate.Transform;
 using NUnit.Framework;
-using NHibernate.Criterion;
 
 namespace NHibernate.Test.SqlTest.Query
 {
@@ -41,14 +42,28 @@ namespace NHibernate.Test.SqlTest.Query
 			"    join EMPLOYMENT emp on org.ORGID = emp.EMPLOYER " +
 			"    join PERSON pers on pers.PERID = emp.EMPLOYEE ";
 
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
-			get { return new[] { "SqlTest.Query.NativeSQLQueries.hbm.xml" }; }
+			get { return new[] {"SqlTest.Query.NativeSQLQueries.hbm.xml"}; }
 		}
 
 		protected override string MappingsAssembly
 		{
 			get { return "NHibernate.Test"; }
+		}
+
+		protected override void OnTearDown()
+		{
+			using (var session = OpenSession())
+			using (var transaction = session.BeginTransaction())
+			{
+				session.CreateQuery("delete from Employment").ExecuteUpdate();
+				session.CreateQuery("delete from System.Object").ExecuteUpdate();
+
+				transaction.Commit();
+			}
+
+			Sfi.QueryCache.Clear();
 		}
 
 		[Test]
@@ -79,60 +94,352 @@ namespace NHibernate.Test.SqlTest.Query
 		[Test]
 		public void SQLQueryInterface()
 		{
-			ISession s = OpenSession();
-			ITransaction t = s.BeginTransaction();
 			Organization ifa = new Organization("IFA");
 			Organization jboss = new Organization("JBoss");
 			Person gavin = new Person("Gavin");
 			Employment emp = new Employment(gavin, jboss, "AU");
 
-			s.Save(ifa);
-			s.Save(jboss);
-			s.Save(gavin);
-			s.Save(emp);
+			using (ISession s = OpenSession())
+			using (ITransaction t = s.BeginTransaction())
+			{
+				s.Save(ifa);
+				s.Save(jboss);
+				s.Save(gavin);
+				s.Save(emp);
 
-			IList l = s.CreateSQLQuery(OrgEmpRegionSQL)
-				.AddEntity("org", typeof(Organization))
-				.AddJoin("emp", "org.employments")
-				.AddScalar("regionCode", NHibernateUtil.String)
-				.List();
-			Assert.AreEqual(2, l.Count);
+				IList l = s.CreateSQLQuery(OrgEmpRegionSQL)
+							.AddEntity("org", typeof(Organization))
+							.AddJoin("emp", "org.employments")
+							.AddScalar("regionCode", NHibernateUtil.String)
+							.List();
+				Assert.AreEqual(2, l.Count);
 
-			l = s.CreateSQLQuery(OrgEmpPersonSQL)
-				.AddEntity("org", typeof(Organization))
-				.AddJoin("emp", "org.employments")
-				.AddJoin("pers", "emp.employee")
-				.List();
-			Assert.AreEqual(l.Count, 1);
+				l = s.CreateSQLQuery(OrgEmpPersonSQL)
+					.AddEntity("org", typeof(Organization))
+					.AddJoin("emp", "org.employments")
+					.AddJoin("pers", "emp.employee")
+					.List();
+				Assert.AreEqual(l.Count, 1);
 
-			t.Commit();
-			s.Close();
+				t.Commit();
+			}
 
-			s = OpenSession();
-			t = s.BeginTransaction();
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
+			{
+				var l = s.CreateSQLQuery(
+							"select {org.*}, {emp.*} " +
+							"from ORGANIZATION org " +
+							"     left outer join EMPLOYMENT emp on org.ORGID = emp.EMPLOYER, ORGANIZATION org2")
+						.AddEntity("org", typeof(Organization))
+						.AddJoin("emp", "org.employments")
+						.SetResultTransformer(new DistinctRootEntityResultTransformer())
+						.List();
+				Assert.AreEqual(l.Count, 2);
 
-			l = s.CreateSQLQuery("select {org.*}, {emp.*} " +
-			                     "from ORGANIZATION org " +
-			                     "     left outer join EMPLOYMENT emp on org.ORGID = emp.EMPLOYER, ORGANIZATION org2")
-				.AddEntity("org", typeof(Organization))
-				.AddJoin("emp", "org.employments")
-				.SetResultTransformer(new DistinctRootEntityResultTransformer())
-				.List();
-			Assert.AreEqual(l.Count, 2);
+				t.Commit();
+				s.Close();
+			}
+		}
 
-			t.Commit();
-			s.Close();
+		[Test]
+		public void SQLQueryInterfaceCacheable()
+		{
+			Organization ifa = new Organization("IFA");
+			Organization jboss = new Organization("JBoss");
+			Person gavin = new Person("Gavin");
+			Employment emp = new Employment(gavin, jboss, "AU");
 
-			s = OpenSession();
-			t = s.BeginTransaction();
+			using (ISession s = OpenSession())
+			using (ITransaction t = s.BeginTransaction())
+			{
+				s.Save(ifa);
+				s.Save(jboss);
+				s.Save(gavin);
+				s.Save(emp);
 
-			s.Delete(emp);
-			s.Delete(gavin);
-			s.Delete(ifa);
-			s.Delete(jboss);
+				IList l = s.CreateSQLQuery(OrgEmpRegionSQL)
+							.AddEntity("org", typeof(Organization))
+							.AddJoin("emp", "org.employments")
+							.AddScalar("regionCode", NHibernateUtil.String)
+							.SetCacheable(true)
+							.List();
+				Assert.AreEqual(2, l.Count);
 
-			t.Commit();
-			s.Close();
+				l = s.CreateSQLQuery(OrgEmpPersonSQL)
+					.AddEntity("org", typeof(Organization))
+					.AddJoin("emp", "org.employments")
+					.AddJoin("pers", "emp.employee")
+					.SetCacheable(true)
+					.List();
+				Assert.AreEqual(l.Count, 1);
+
+				t.Commit();
+			}
+
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
+			{
+				var l = s.CreateSQLQuery(
+							"select {org.*}, {emp.*} " +
+							"from ORGANIZATION org " +
+							"     left outer join EMPLOYMENT emp on org.ORGID = emp.EMPLOYER, ORGANIZATION org2")
+						.AddEntity("org", typeof(Organization))
+						.AddJoin("emp", "org.employments")
+						.SetCacheable(true)
+						.SetResultTransformer(new DistinctRootEntityResultTransformer())
+						.List();
+				Assert.AreEqual(l.Count, 2);
+
+				t.Commit();
+				s.Close();
+			}
+		}
+
+		[Test(Description = "GH-2904")]
+		public void CacheableScalarSqlQuery()
+		{
+			Organization ifa = new Organization("IFA");
+			Organization jboss = new Organization("JBoss");
+			Person gavin = new Person("Gavin");
+			Employment emp = new Employment(gavin, jboss, "AU");
+
+			using (ISession s = OpenSession())
+			using (ITransaction t = s.BeginTransaction())
+			{
+				s.Save(ifa);
+				s.Save(jboss);
+				s.Save(gavin);
+				s.Save(emp);
+				t.Commit();
+			}
+
+			using (ISession s = OpenSession())
+			{
+				IList GetCacheableSqlQueryResults()
+				{
+					return s.CreateSQLQuery(
+								"select emp.REGIONCODE " +
+								"from ORGANIZATION org " +
+								"left outer join EMPLOYMENT emp on org.ORGID = emp.EMPLOYER ")
+							.AddScalar("regionCode", NHibernateUtil.String)
+							.SetCacheable(true)
+							.List();
+				}
+
+				using (EnableStatisticsScope())
+				{
+					IList l = GetCacheableSqlQueryResults();
+					Assert.AreEqual(2, l.Count);
+					Assert.That(Sfi.Statistics.QueryCacheMissCount, Is.EqualTo(1), "results are expected from DB");
+					Assert.That(Sfi.Statistics.QueryCacheHitCount, Is.EqualTo(0), "results are expected from DB");
+				}
+
+				using (EnableStatisticsScope())
+				{
+					IList l2 = GetCacheableSqlQueryResults();
+					Assert.AreEqual(2, l2.Count);
+					Assert.That(Sfi.Statistics.QueryCacheMissCount, Is.EqualTo(0), "results are expected from cache");
+					Assert.That(Sfi.Statistics.QueryCacheHitCount, Is.EqualTo(1), "results are expected from cache");
+				}
+			}
+		}
+
+		class ResultDto
+		{
+			public long orgId { get; set; }
+			public string regionCode { get; set; }
+		}
+
+		[Test(Description = "GH-3169")]
+		public void CacheableScalarSqlQueryWithTransformer()
+		{
+			Organization ifa = new Organization("IFA");
+
+			using (ISession s = OpenSession())
+			using (ITransaction t = s.BeginTransaction())
+			{
+				s.Save(ifa);
+				t.Commit();
+			}
+
+			void AssertQuery(bool fromCache)
+			{
+				using (var s = OpenSession())
+				using (var t = s.BeginTransaction())
+				using (EnableStatisticsScope())
+				{
+					var l = s.CreateSQLQuery("select org.NAME as regionCode from ORGANIZATION org")
+							.AddScalar("regionCode", NHibernateUtil.String)
+							.SetResultTransformer(Transformers.AliasToBean<ResultDto>())
+							.SetCacheable(true)
+							.List();
+					t.Commit();
+
+					Assert.That(l.Count, Is.EqualTo(1));
+					var msg = "Results are expected from " + (fromCache ? "cache" : "DB");
+					Assert.That(Sfi.Statistics.QueryCacheMissCount, Is.EqualTo(fromCache ? 0 : 1), msg);
+					Assert.That(Sfi.Statistics.QueryCacheHitCount, Is.EqualTo(fromCache ? 1 : 0), msg);
+				}
+			}
+
+			AssertQuery(false);
+			AssertQuery(true);
+		}
+
+		[Test(Description = "GH-3169")]
+		public void CacheableScalarSqlEmptyQueryWithTransformer()
+		{
+			void AssertQuery(bool fromCache)
+			{
+				using (var s = OpenSession())
+				using (var t = s.BeginTransaction())
+				using (EnableStatisticsScope())
+				{
+					var l = s.CreateSQLQuery("select org.NAME as regionCode from ORGANIZATION org")
+							.AddScalar("regionCode", NHibernateUtil.String)
+							.SetResultTransformer(Transformers.AliasToBean<ResultDto>())
+							.SetCacheable(true)
+							.List();
+					t.Commit();
+
+					Assert.That(l.Count, Is.EqualTo(0));
+					var msg = "Results are expected from " + (fromCache ? "cache" : "DB");
+					Assert.That(Sfi.Statistics.QueryCacheMissCount, Is.EqualTo(fromCache ? 0 : 1), msg);
+					Assert.That(Sfi.Statistics.QueryCacheHitCount, Is.EqualTo(fromCache ? 1 : 0), msg);
+				}
+			}
+
+			AssertQuery(false);
+			AssertQuery(true);
+		}
+
+		[Test(Description = "GH-3169")]
+		public void CacheableScalarSqlMultiQueryWithTransformer()
+		{
+			Organization ifa = new Organization("IFA");
+
+			using (ISession s = OpenSession())
+			using (ITransaction t = s.BeginTransaction())
+			{
+				s.Save(ifa);
+				t.Commit();
+			}
+
+			void AssertQuery(bool fromCache)
+			{
+				using (var s = OpenSession())
+				using (var t = s.BeginTransaction())
+				using (EnableStatisticsScope())
+				{
+					var q1 = s.CreateSQLQuery("select org.NAME as regionCode from ORGANIZATION org")
+							.AddScalar("regionCode", NHibernateUtil.String)
+							.SetResultTransformer(Transformers.AliasToBean<ResultDto>())
+							.SetCacheable(true);
+					var q2 = s.CreateSQLQuery("select org.ORGID as orgId, org.NAME as regionCode from ORGANIZATION org")
+							.AddScalar("orgId", NHibernateUtil.Int64)
+							.AddScalar("regionCode", NHibernateUtil.String)
+							.SetResultTransformer(Transformers.AliasToBean<ResultDto>())
+							.SetCacheable(true);
+
+					var batch = s.CreateQueryBatch();
+					batch.Add<ResultDto>(q1);
+					batch.Add<ResultDto>(q2);
+					batch.Execute();
+
+					var l1 = batch.GetResult<ResultDto>(0);
+					var l2 = batch.GetResult<ResultDto>(1);
+
+					t.Commit();
+
+					Assert.That(l1.Count, Is.EqualTo(1), "Unexpected results count for the first query.");
+					Assert.That(l2.Count, Is.EqualTo(1), "Unexpected results count for the second query.");
+					var msg = "Results are expected from " + (fromCache ? "cache" : "DB");
+					Assert.That(Sfi.Statistics.QueryCacheMissCount, Is.EqualTo(fromCache ? 0 : 2), msg);
+					Assert.That(Sfi.Statistics.QueryCacheHitCount, Is.EqualTo(fromCache ? 2 : 0), msg);
+				}
+			}
+
+			AssertQuery(false);
+			AssertQuery(true);
+		}
+
+		[Test(Description = "GH-3169")]
+		public void CacheableScalarSqlEmptyMultiQueryWithTransformer()
+		{
+			void AssertQuery(bool fromCache)
+			{
+				using (var s = OpenSession())
+				using (var t = s.BeginTransaction())
+				using (EnableStatisticsScope())
+				{
+					var q1 = s.CreateSQLQuery("select org.NAME as regionCode from ORGANIZATION org")
+							.AddScalar("regionCode", NHibernateUtil.String)
+							.SetResultTransformer(Transformers.AliasToBean<ResultDto>())
+							.SetCacheable(true);
+					var q2 = s.CreateSQLQuery("select org.ORGID as orgId, org.NAME as regionCode from ORGANIZATION org")
+							.AddScalar("orgId", NHibernateUtil.Int64)
+							.AddScalar("regionCode", NHibernateUtil.String)
+							.SetResultTransformer(Transformers.AliasToBean<ResultDto>())
+							.SetCacheable(true);
+
+					var batch = s.CreateQueryBatch();
+					batch.Add<ResultDto>(q1);
+					batch.Add<ResultDto>(q2);
+					batch.Execute();
+
+					var l1 = batch.GetResult<ResultDto>(0);
+					var l2 = batch.GetResult<ResultDto>(1);
+
+					t.Commit();
+
+					Assert.That(l1.Count, Is.EqualTo(0), "Unexpected results count for the first query.");
+					Assert.That(l2.Count, Is.EqualTo(0), "Unexpected results count for the second query.");
+					var msg = "Results are expected from " + (fromCache ? "cache" : "DB");
+					Assert.That(Sfi.Statistics.QueryCacheMissCount, Is.EqualTo(fromCache ? 0 : 2), msg);
+					Assert.That(Sfi.Statistics.QueryCacheHitCount, Is.EqualTo(fromCache ? 2 : 0), msg);
+				}
+			}
+
+			AssertQuery(false);
+			AssertQuery(true);
+		}
+
+		[Test(Description = "GH-3169")]
+		public void CacheableMultiScalarSqlQueryWithTransformer()
+		{
+			Organization ifa = new Organization("IFA");
+
+			using (ISession s = OpenSession())
+			using (ITransaction t = s.BeginTransaction())
+			{
+				s.Save(ifa);
+				t.Commit();
+			}
+
+			void AssertQuery(bool fromCache)
+			{
+				using (var s = OpenSession())
+				using (var t = s.BeginTransaction())
+				using (EnableStatisticsScope())
+				{
+					var l = s.CreateSQLQuery("select org.ORGID as orgId, org.NAME as regionCode from ORGANIZATION org")
+							.AddScalar("orgId", NHibernateUtil.Int64)
+							.AddScalar("regionCode", NHibernateUtil.String)
+							.SetResultTransformer(Transformers.AliasToBean<ResultDto>())
+							.SetCacheable(true)
+							.List();
+					t.Commit();
+
+					Assert.That(l.Count, Is.EqualTo(1));
+					var msg = "Results are expected from " + (fromCache ? "cache" : "DB");
+					Assert.That(Sfi.Statistics.QueryCacheMissCount, Is.EqualTo(fromCache ? 0 : 1), msg);
+					Assert.That(Sfi.Statistics.QueryCacheHitCount, Is.EqualTo(fromCache ? 1 : 0), msg);
+				}
+			}
+
+			AssertQuery(false);
+			AssertQuery(true);
 		}
 
 		[Test]
@@ -151,19 +458,14 @@ namespace NHibernate.Test.SqlTest.Query
 			s.Save(emp);
 
 			IList l = s.CreateSQLQuery(OrgEmpRegionSQL)
-				.SetResultSetMapping("org-emp-regionCode")
-				.List();
+			           .SetResultSetMapping("org-emp-regionCode")
+			           .List();
 			Assert.AreEqual(l.Count, 2);
 
 			l = s.CreateSQLQuery(OrgEmpPersonSQL)
-				.SetResultSetMapping("org-emp-person")
-				.List();
+			     .SetResultSetMapping("org-emp-person")
+			     .List();
 			Assert.AreEqual(l.Count, 1);
-
-			s.Delete(emp);
-			s.Delete(gavin);
-			s.Delete(ifa);
-			s.Delete(jboss);
 
 			t.Commit();
 			s.Close();
@@ -247,8 +549,6 @@ namespace NHibernate.Test.SqlTest.Query
 			Assert.AreEqual(o[1], "JBoss");
 			Assert.AreEqual(o[0], idJBoss);
 
-			s.Delete(ifa);
-			s.Delete(jboss);
 			t.Commit();
 			s.Close();
 		}
@@ -294,20 +594,23 @@ namespace NHibernate.Test.SqlTest.Query
 			t.Commit();
 			s.Close();
 
-			s = OpenSession();
-			t = s.BeginTransaction();
-			sqlQuery = s.GetNamedQuery("organizationreturnproperty");
-			sqlQuery.SetResultTransformer(CriteriaSpecification.AliasToEntityMap);
-			list = sqlQuery.List();
-			Assert.AreEqual(2, list.Count);
-			m = (IDictionary) list[0];
-			Assert.IsTrue(m.Contains("org"));
-			AssertClassAssignability(m["org"].GetType(), typeof(Organization));
-			Assert.IsTrue(m.Contains("emp"));
-			AssertClassAssignability(m["emp"].GetType(), typeof(Employment));
-			Assert.AreEqual(2, m.Count);
-			t.Commit();
-			s.Close();
+			if (TestDialect.SupportsDuplicatedColumnAliases)
+			{
+				s = OpenSession();
+				t = s.BeginTransaction();
+				sqlQuery = s.GetNamedQuery("organizationreturnproperty");
+				sqlQuery.SetResultTransformer(CriteriaSpecification.AliasToEntityMap);
+				list = sqlQuery.List();
+				Assert.AreEqual(2, list.Count);
+				m = (IDictionary) list[0];
+				Assert.IsTrue(m.Contains("org"));
+				AssertClassAssignability(m["org"].GetType(), typeof(Organization));
+				Assert.IsTrue(m.Contains("emp"));
+				AssertClassAssignability(m["emp"].GetType(), typeof(Employment));
+				Assert.AreEqual(2, m.Count);
+				t.Commit();
+				s.Close();
+			}
 
 			s = OpenSession();
 			t = s.BeginTransaction();
@@ -367,28 +670,29 @@ namespace NHibernate.Test.SqlTest.Query
 
 			s = OpenSession();
 			t = s.BeginTransaction();
-			object[] o = (object[]) s.CreateSQLQuery("select\r\n" +
-			                                         "        product.orgid as {product.id.orgid}," +
-			                                         "        product.productnumber as {product.id.productnumber}," +
-			                                         "        {prod_orders}.orgid as orgid3_1_,\r\n" +
-			                                         "        {prod_orders}.ordernumber as ordernum2_3_1_,\r\n" +
-			                                         "        product.name as {product.name}," +
-			                                         "        {prod_orders.element.*}," +
-			                                         /*"        orders.PROD_NO as PROD4_3_1_,\r\n" +
-				"        orders.person as person3_1_,\r\n" +
-				"        orders.PROD_ORGID as PROD3_0__,\r\n" +
-				"        orders.PROD_NO as PROD4_0__,\r\n" +
-				"        orders.orgid as orgid0__,\r\n" +
-				"        orders.ordernumber as ordernum2_0__ \r\n" +*/
-			                                         "    from\r\n" +
-			                                         "        Product product \r\n" +
-			                                         "    inner join\r\n" +
-			                                         "        TBL_ORDER {prod_orders} \r\n" +
-			                                         "            on product.orgid={prod_orders}.PROD_ORGID \r\n" +
-			                                         "            and product.productnumber={prod_orders}.PROD_NO")
-			                        	.AddEntity("product", typeof(Product))
-			                        	.AddJoin("prod_orders", "product.orders")
-			                        	.List()[0];
+			object[] o = (object[]) s.CreateSQLQuery(
+				                         "select\r\n" +
+				                         "        product.orgid as {product.id.orgid}," +
+				                         "        product.productnumber as {product.id.productnumber}," +
+				                         "        {prod_orders}.orgid as orgid3_1_,\r\n" +
+				                         "        {prod_orders}.ordernumber as ordernum2_3_1_,\r\n" +
+				                         "        product.name as {product.name}," +
+				                         "        {prod_orders.element.*}," +
+				                         /*"        orders.PROD_NO as PROD4_3_1_,\r\n" +
+	  "        orders.person as person3_1_,\r\n" +
+	  "        orders.PROD_ORGID as PROD3_0__,\r\n" +
+	  "        orders.PROD_NO as PROD4_0__,\r\n" +
+	  "        orders.orgid as orgid0__,\r\n" +
+	  "        orders.ordernumber as ordernum2_0__ \r\n" +*/
+				                         "    from\r\n" +
+				                         "        Product product \r\n" +
+				                         "    inner join\r\n" +
+				                         "        TBL_ORDER {prod_orders} \r\n" +
+				                         "            on product.orgid={prod_orders}.PROD_ORGID \r\n" +
+				                         "            and product.productnumber={prod_orders}.PROD_NO")
+			                         .AddEntity("product", typeof(Product))
+			                         .AddJoin("prod_orders", "product.orders")
+			                         .List()[0];
 
 			p = (Product) o[0];
 			Assert.IsTrue(NHibernateUtil.IsInitialized(p.Orders));
@@ -418,8 +722,8 @@ namespace NHibernate.Test.SqlTest.Query
 			s = OpenSession();
 			t = s.BeginTransaction();
 			IList list = s.CreateSQLQuery(EmploymentSQL)
-				.AddEntity(typeof(Employment).FullName)
-				.List();
+			              .AddEntity(typeof(Employment).FullName)
+			              .List();
 			Assert.AreEqual(1, list.Count);
 
 			Employment emp2 = (Employment) list[0];
@@ -430,9 +734,9 @@ namespace NHibernate.Test.SqlTest.Query
 			s.Clear();
 
 			list = s.CreateSQLQuery(EmploymentSQL)
-				.AddEntity(typeof(Employment).FullName)
-				.SetResultTransformer(CriteriaSpecification.AliasToEntityMap)
-				.List();
+			        .AddEntity(typeof(Employment).FullName)
+			        .SetResultTransformer(CriteriaSpecification.AliasToEntityMap)
+			        .List();
 			Assert.AreEqual(1, list.Count);
 			IDictionary m = (IDictionary) list[0];
 			Assert.IsTrue(m.Contains("Employment"));
@@ -462,7 +766,6 @@ namespace NHibernate.Test.SqlTest.Query
 			AssertClassAssignability(o[0].GetType(), typeof(long));
 			AssertClassAssignability(o[1].GetType(), typeof(Employment));
 
-
 			IQuery queryWithCollection = s.GetNamedQuery("organizationEmploymentsExplicitAliases");
 			queryWithCollection.SetInt64("id", jboss.Id);
 			list = queryWithCollection.List();
@@ -471,30 +774,33 @@ namespace NHibernate.Test.SqlTest.Query
 			s.Clear();
 
 			list = s.CreateSQLQuery(OrganizationJoinEmploymentSQL)
-				.AddEntity("org", typeof(Organization))
-				.AddJoin("emp", "org.employments")
-				.List();
+			        .AddEntity("org", typeof(Organization))
+			        .AddJoin("emp", "org.employments")
+			        .List();
 			Assert.AreEqual(2, list.Count);
 
 			s.Clear();
 
 			list = s.CreateSQLQuery(OrganizationFetchJoinEmploymentSQL)
-				.AddEntity("org", typeof(Organization))
-				.AddJoin("emp", "org.employments")
-				.List();
+			        .AddEntity("org", typeof(Organization))
+			        .AddJoin("emp", "org.employments")
+			        .List();
 			Assert.AreEqual(2, list.Count);
 
 			s.Clear();
 
-			// TODO : why twice?
-			s.GetNamedQuery("organizationreturnproperty").List();
-			list = s.GetNamedQuery("organizationreturnproperty").List();
-			Assert.AreEqual(2, list.Count);
+			if (TestDialect.SupportsDuplicatedColumnAliases)
+			{
+				// TODO : why twice?
+				s.GetNamedQuery("organizationreturnproperty").List();
+				list = s.GetNamedQuery("organizationreturnproperty").List();
+				Assert.AreEqual(2, list.Count);
 
-			s.Clear();
+				s.Clear();
 
-			list = s.GetNamedQuery("organizationautodetect").List();
-			Assert.AreEqual(2, list.Count);
+				list = s.GetNamedQuery("organizationautodetect").List();
+				Assert.AreEqual(2, list.Count);
+			}
 
 			t.Commit();
 			s.Close();
@@ -552,8 +858,8 @@ namespace NHibernate.Test.SqlTest.Query
 			s.Clear();
 
 			IList l = s.CreateSQLQuery("select name, id, flength, name as scalarName from Speech")
-				.SetResultSetMapping("speech")
-				.List();
+			           .SetResultSetMapping("speech")
+			           .List();
 			Assert.AreEqual(l.Count, 1);
 
 			t.Rollback();
@@ -566,9 +872,9 @@ namespace NHibernate.Test.SqlTest.Query
 			using (ISession s = OpenSession())
 			{
 				IList l = s.CreateSQLQuery("select id from Speech where id in (:idList)")
-					.AddScalar("id", NHibernateUtil.Int32)
-					.SetParameterList("idList", new int[] {0, 1, 2, 3}, NHibernateUtil.Int32)
-					.List();
+				           .AddScalar("id", NHibernateUtil.Int32)
+				           .SetParameterList("idList", new int[] {0, 1, 2, 3}, NHibernateUtil.Int32)
+				           .List();
 			}
 		}
 
@@ -590,23 +896,26 @@ namespace NHibernate.Test.SqlTest.Query
 
 		public static void AssertClassAssignability(System.Type source, System.Type target)
 		{
-			Assert.IsTrue(target.IsAssignableFrom(source),
-			              "Classes were not assignment-compatible : source<" +
-			              source.FullName +
-			              "> target<" +
-			              target.FullName + ">"
-				);
+			Assert.IsTrue(
+				target.IsAssignableFrom(source),
+				"Classes were not assignment-compatible : source<" +
+				source.FullName +
+				"> target<" +
+				target.FullName + ">"
+			);
 		}
 
 		class TestResultSetTransformer : IResultTransformer
 		{
 			public bool TransformTupleCalled { get; set; }
 			public bool TransformListCalled { get; set; }
+
 			public object TransformTuple(object[] tuple, string[] aliases)
 			{
 				this.TransformTupleCalled = true;
 				return tuple;
 			}
+
 			public IList TransformList(IList collection)
 			{
 				this.TransformListCalled = true;
@@ -630,8 +939,8 @@ namespace NHibernate.Test.SqlTest.Query
 					.SetResultTransformer(transformer)
 					.Future<object[]>();
 
-				Assert.AreEqual(l.Count(), 1);
-				Assert.AreEqual("Ricardo", l.ElementAt(0)[0]);
+				Assert.AreEqual(l.GetEnumerable().Count(), 1);
+				Assert.AreEqual("Ricardo", l.GetEnumerable().ElementAt(0)[0]);
 				Assert.IsTrue(transformer.TransformListCalled);
 				Assert.IsTrue(transformer.TransformTupleCalled);
 			}
@@ -675,8 +984,8 @@ namespace NHibernate.Test.SqlTest.Query
 					.CreateSQLQuery("select Name from Person")
 					.Future<string>();
 
-				Assert.AreEqual(l.Count(), 1);
-				Assert.AreEqual("Ricardo", l.ElementAt(0));
+				Assert.AreEqual(l.GetEnumerable().Count(), 1);
+				Assert.AreEqual("Ricardo", l.GetEnumerable().ElementAt(0));
 			}
 		}
 
@@ -697,6 +1006,34 @@ namespace NHibernate.Test.SqlTest.Query
 				var v = l.Value;
 
 				Assert.AreEqual("Ricardo", v);
+			}
+		}
+
+		[Test]
+		public void HandlesManualSynchronization()
+		{
+			using (var s = OpenSession())
+			using (var t = s.BeginTransaction())
+			{
+				s.SessionFactory.Statistics.IsStatisticsEnabled = true;
+				s.SessionFactory.Statistics.Clear();
+
+				// create an Organization...
+				Organization jboss = new Organization("JBoss");
+				s.Persist(jboss);
+
+				// now query on Employment, this should not cause an auto-flush
+				s.CreateSQLQuery(EmploymentSQL).AddSynchronizedQuerySpace("ABC").List();
+				Assert.AreEqual(0, s.SessionFactory.Statistics.EntityInsertCount);
+
+				// now try to query on Employment but this time add Organization as a synchronized query space...
+				s.CreateSQLQuery(EmploymentSQL).AddSynchronizedEntityClass(typeof(Organization)).List();
+				Assert.AreEqual(1, s.SessionFactory.Statistics.EntityInsertCount);
+
+				// clean up
+				s.Delete(jboss);
+				t.Commit();
+				s.Close();
 			}
 		}
 	}

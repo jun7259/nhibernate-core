@@ -3,19 +3,17 @@ using NUnit.Framework;
 
 namespace NHibernate.Test.MappingByCode.ExplicitlyDeclaredModelTests
 {
+	[TestFixture]
 	public class SubclassMappingStrategyTests
 	{
 		private class MyClass
 		{
-
 		}
 		private class Inherited1 : MyClass
 		{
-
 		}
 		private class Inherited2 : Inherited1
 		{
-
 		}
 
 		[Test]
@@ -78,6 +76,24 @@ namespace NHibernate.Test.MappingByCode.ExplicitlyDeclaredModelTests
 			inspector.AddAsTablePerClassHierarchyEntity(typeof(Inherited1));
 
 			Assert.That(inspector.IsEntity(typeof(Inherited1)), Is.True);
+		}
+
+		[Test]
+		public void SubclassIsAbstract()
+		{
+			//NH-3527
+			var modelMapper = new ModelMapper();
+			modelMapper.Class<MyClass>(c => { });
+			modelMapper.Subclass<Inherited1>(c =>
+			{
+				c.Abstract(true);
+				c.Extends(typeof(MyClass));
+			});
+
+			var mappings = modelMapper.CompileMappingForAllExplicitlyAddedEntities();
+
+			Assert.IsTrue(mappings.SubClasses[0].@abstract);
+			Assert.IsTrue(mappings.SubClasses[0].extends == typeof(MyClass).FullName);
 		}
 	}
 }

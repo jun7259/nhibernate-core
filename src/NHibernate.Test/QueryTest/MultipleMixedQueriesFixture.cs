@@ -1,12 +1,12 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using NHibernate.Driver;
 using NHibernate.Test.SecondLevelCacheTests;
 using NUnit.Framework;
 
 namespace NHibernate.Test.QueryTest
 {
+	[TestFixture, Obsolete]
 	public class MultipleMixedQueriesFixture : TestCase
 	{
 		protected override string MappingsAssembly
@@ -14,7 +14,7 @@ namespace NHibernate.Test.QueryTest
 			get { return "NHibernate.Test"; }
 		}
 
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get { return new[] { "SecondLevelCacheTest.Item.hbm.xml" }; }
 		}
@@ -38,7 +38,7 @@ namespace NHibernate.Test.QueryTest
 		[Test]
 		public void NH_1085_WillIgnoreParametersIfDoesNotAppearInQuery()
 		{
-			using (var s = sessions.OpenSession())
+			using (var s = Sfi.OpenSession())
 			{
 				var multiQuery = s.CreateMultiQuery()
 					.Add(s.CreateSQLQuery("select * from ITEM where Id in (:ids)").AddEntity(typeof (Item)))
@@ -52,7 +52,7 @@ namespace NHibernate.Test.QueryTest
 		[Test]
 		public void NH_1085_WillGiveReasonableErrorIfBadParameterName()
 		{
-			using (var s = sessions.OpenSession())
+			using (var s = Sfi.OpenSession())
 			{
 				var multiQuery = s.CreateMultiQuery()
 					.Add(s.CreateSQLQuery("select * from ITEM where Id in (:ids)").AddEntity(typeof(Item)))
@@ -66,22 +66,23 @@ namespace NHibernate.Test.QueryTest
 		public void CanGetMultiQueryFromSecondLevelCache()
 		{
 			CreateItems();
-			//set the query in the cache
-			DoMutiQueryAndAssert();
+			// Set the query in the cache.
+			DoMultiQueryAndAssert();
 
-			var cacheHashtable = MultipleQueriesFixture.GetHashTableUsedAsQueryCache(sessions);
-			var cachedListEntry = (IList)new ArrayList(cacheHashtable.Values)[0];
-			var cachedQuery = (IList)cachedListEntry[1];
+			var cacheHashtable = MultipleQueriesFixture.GetHashTableUsedAsQueryCache(Sfi);
+			var cachedListEntry = (IList) new ArrayList(cacheHashtable.Values)[0];
+			// The first element is a timestamp, then only we have the cached data.
+			var cachedQuery = (IList) cachedListEntry[1] ?? throw new InvalidOperationException("Cached data is null");
 
-			var firstQueryResults = (IList)cachedQuery[0];
+			var firstQueryResults = (IList) cachedQuery[0];
 			firstQueryResults.Clear();
 			firstQueryResults.Add(3);
 			firstQueryResults.Add(4);
 
-			var secondQueryResults = (IList)cachedQuery[1];
+			var secondQueryResults = (IList) cachedQuery[1];
 			secondQueryResults[0] = 2L;
 
-			using (var s = sessions.OpenSession())
+			using (var s = Sfi.OpenSession())
 			{
 				var multiQuery = s.CreateMultiQuery()
 					.Add(s.CreateSQLQuery("select * from ITEM where Id > ?").AddEntity(typeof(Item))
@@ -91,9 +92,9 @@ namespace NHibernate.Test.QueryTest
 							 .SetInt32(0, 50));
 				multiQuery.SetCacheable(true);
 				var results = multiQuery.List();
-				var items = (IList)results[0];
+				var items = (IList) results[0];
 				Assert.AreEqual(2, items.Count);
-				var count = (long)((IList)results[1])[0];
+				var count = (long) ((IList) results[1])[0];
 				Assert.AreEqual(2L, count);
 			}
 		}
@@ -168,17 +169,17 @@ namespace NHibernate.Test.QueryTest
 		[Test]
 		public void CanUseSecondLevelCacheWithPositionalParameters()
 		{
-			var cacheHashtable = MultipleQueriesFixture.GetHashTableUsedAsQueryCache(sessions);
+			var cacheHashtable = MultipleQueriesFixture.GetHashTableUsedAsQueryCache(Sfi);
 			cacheHashtable.Clear();
 
 			CreateItems();
 
-			DoMutiQueryAndAssert();
+			DoMultiQueryAndAssert();
 
 			Assert.AreEqual(1, cacheHashtable.Count);
 		}
 
-		private void DoMutiQueryAndAssert()
+		private void DoMultiQueryAndAssert()
 		{
 			using (var s = OpenSession())
 			{
@@ -190,9 +191,9 @@ namespace NHibernate.Test.QueryTest
 							 .SetInt32(0, 50));
 				multiQuery.SetCacheable(true);
 				var results = multiQuery.List();
-				var items = (IList)results[0];
+				var items = (IList) results[0];
 				Assert.AreEqual(89, items.Count);
-				var count = (long)((IList)results[1])[0];
+				var count = (long) ((IList) results[1])[0];
 				Assert.AreEqual(99L, count);
 			}
 		}

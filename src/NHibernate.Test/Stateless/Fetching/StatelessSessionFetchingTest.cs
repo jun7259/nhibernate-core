@@ -15,7 +15,7 @@ namespace NHibernate.Test.Stateless.Fetching
 			get { return "NHibernate.Test"; }
 		}
 
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get
 			{
@@ -41,7 +41,7 @@ namespace NHibernate.Test.Stateless.Fetching
 				tx.Commit();
 			}
 
-			using (IStatelessSession ss = sessions.OpenStatelessSession())
+			using (IStatelessSession ss = Sfi.OpenStatelessSession())
 			using (ITransaction tx = ss.BeginTransaction())
 			{
 				ss.BeginTransaction();
@@ -71,5 +71,4 @@ namespace NHibernate.Test.Stateless.Fetching
 			}
 		}
 	}
-
 }

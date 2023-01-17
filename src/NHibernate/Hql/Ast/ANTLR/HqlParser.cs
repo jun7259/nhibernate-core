@@ -2,6 +2,7 @@ using System;
 using Antlr.Runtime;
 
 using NHibernate.Hql.Ast.ANTLR.Tree;
+using NHibernate.Util;
 using IToken = Antlr.Runtime.IToken;
 using RecognitionException = Antlr.Runtime.RecognitionException;
 
@@ -9,7 +10,7 @@ namespace NHibernate.Hql.Ast.ANTLR
 {
 	public partial class HqlParser
 	{
-		private static readonly IInternalLogger log = LoggerProvider.LoggerFor(typeof(HqlParser));
+		private static readonly INHibernateLogger log = NHibernateLogger.For(typeof(HqlParser));
 
 		internal static readonly bool[] possibleIds;
 
@@ -85,6 +86,8 @@ namespace NHibernate.Hql.Ast.ANTLR
 
 		/** True if this is a filter query (allow no FROM clause). **/
 		private bool filter;
+		// Depth of curreny query (root query has depth = 1)
+		private int queryDepth = 0;
 		private IParseErrorHandler _parseErrorHandler = new ErrorCounter();
 
 		public IParseErrorHandler ParseErrorHandler
@@ -98,7 +101,6 @@ namespace NHibernate.Hql.Ast.ANTLR
 			get { return filter; }
 			set { filter = value; }
 		}
-
 
 		public override void ReportError(RecognitionException e)
 		{
@@ -123,9 +125,21 @@ namespace NHibernate.Hql.Ast.ANTLR
 					if (input.LA(2) != LITERAL_by)
 					{
 						input.LT(1).Type = IDENT;
-						if (log.IsDebugEnabled)
+						if (log.IsDebugEnabled())
 						{
-							log.Debug("weakKeywords() : new LT(1) token - " + input.LT(1));
+							log.Debug("weakKeywords() : new LT(1) token - {0}", input.LT(1));
+						}
+					}
+					break;
+				case LEFT:
+				case RIGHT:
+					// Support left and right functions
+					if (input.LA(2) == OPEN)
+					{
+						input.LT(1).Type = IDENT;
+						if (log.IsDebugEnabled())
+						{
+							log.Debug("weakKeywords() : new LT(1) token - {0}", input.LT(1));
 						}
 					}
 					break;
@@ -137,9 +151,9 @@ namespace NHibernate.Hql.Ast.ANTLR
 						if (hqlToken != null && hqlToken.PossibleId)
 						{
 							hqlToken.Type = IDENT;
-							if (log.IsDebugEnabled)
+							if (log.IsDebugEnabled())
 							{
-								log.Debug("weakKeywords() : new LT(1) token - " + input.LT(1));
+								log.Debug("weakKeywords() : new LT(1) token - {0}", input.LT(1));
 							}
 						}
 					}
@@ -168,9 +182,9 @@ namespace NHibernate.Hql.Ast.ANTLR
                     if (input.LA(2) != LITERAL_by)
                     {
                         input.LT(1).Type = IDENT;
-                        if (log.IsDebugEnabled)
+                        if (log.IsDebugEnabled())
                         {
-                            log.Debug("weakKeywords() : new LT(1) token - " + input.LT(1));
+                            log.Debug("weakKeywords() : new LT(1) token - {0}", input.LT(1));
                         }
                     }
                     break;
@@ -182,9 +196,9 @@ namespace NHibernate.Hql.Ast.ANTLR
                         if (hqlToken.PossibleId)
                         {
                             hqlToken.Type = IDENT;
-                            if (log.IsDebugEnabled)
+                            if (log.IsDebugEnabled())
                             {
-                                log.Debug("weakKeywords() : new LT(1) token - " + input.LT(1));
+                                log.Debug("weakKeywords() : new LT(1) token - {0}", input.LT(1));
                             }
                         }
                     }
@@ -327,9 +341,9 @@ namespace NHibernate.Hql.Ast.ANTLR
 				{
 					// Set it!
 					input.LT(2).Type = IDENT;
-					if (log.IsDebugEnabled)
+					if (log.IsDebugEnabled())
 					{
-						log.Debug("handleDotIdent() : new LT(2) token - " + input.LT(1));
+						log.Debug("handleDotIdent() : new LT(2) token - {0}", input.LT(1));
 					}
 				}
 			}
@@ -416,6 +430,7 @@ namespace NHibernate.Hql.Ast.ANTLR
 			}
 			
 			// Otherwise, handle the error normally.
+			ReflectHelper.PreserveStackTrace(ex);
 			throw ex;
 		}
 	}

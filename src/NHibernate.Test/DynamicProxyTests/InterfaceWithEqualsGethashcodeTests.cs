@@ -1,9 +1,12 @@
+using System;
 using System.Collections.Generic;
 using NHibernate.Proxy.DynamicProxy;
 using NUnit.Framework;
 
 namespace NHibernate.Test.DynamicProxyTests
 {
+	[TestFixture]
+	[Obsolete]
 	public class InterfaceWithEqualsGethashcodeTests
 	{
 		public interface IMyBaseObject

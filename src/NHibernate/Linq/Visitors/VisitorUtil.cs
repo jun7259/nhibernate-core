@@ -4,7 +4,9 @@ using System.Linq.Expressions;
 using System.Collections;
 using System.Reflection;
 using NHibernate.Util;
-using Remotion.Linq.Clauses.Expressions;
+using Remotion.Linq.Parsing.ExpressionVisitors;
+using NHibernate.Engine;
+using System;
 
 namespace NHibernate.Linq.Visitors
 {
@@ -12,82 +14,35 @@ namespace NHibernate.Linq.Visitors
 	{
 		public static bool IsDynamicComponentDictionaryGetter(MethodInfo method, Expression targetObject, IEnumerable<Expression> arguments, ISessionFactory sessionFactory, out string memberName)
 		{
-			memberName = null;
-
-			// A dynamic component must be an IDictionary with a string key.
-
-			if (method.Name != "get_Item" || !typeof(IDictionary).IsAssignableFrom(targetObject.Type))
-				return false;
-
-			var key = arguments.First() as ConstantExpression;
-			if (key == null || key.Type != typeof(string))
-				return false;
-
-			// The potential member name
-			memberName = (string)key.Value;
-
-			// Need the owning member (the dictionary).
-			var member = targetObject as MemberExpression;
-			if (member == null)
-				return false;
-
-			var memberPath = member.Member.Name;
-			var metaData = sessionFactory.GetClassMetadata(member.Expression.Type);
-
-			//Walk backwards if the owning member is not a mapped class (i.e a possible Component)
-			targetObject = member.Expression;
-			while (metaData == null && targetObject != null &&
-			       (targetObject.NodeType == ExpressionType.MemberAccess || targetObject.NodeType == ExpressionType.Parameter ||
-			        targetObject.NodeType == QuerySourceReferenceExpression.ExpressionType))
-			{
-				System.Type memberType;
-				if (targetObject.NodeType == QuerySourceReferenceExpression.ExpressionType)
-				{
-					var querySourceExpression = (QuerySourceReferenceExpression) targetObject;
-					memberType = querySourceExpression.Type;
-				}
-				else if (targetObject.NodeType == ExpressionType.Parameter)
-				{
-					var parameterExpression = (ParameterExpression) targetObject;
-					memberType = parameterExpression.Type;
-				}
-				else //targetObject.NodeType == ExpressionType.MemberAccess
-				{
-					var memberExpression = ((MemberExpression) targetObject);
-					memberPath = memberExpression.Member.Name + "." + memberPath;
-					memberType = memberExpression.Type;
-					targetObject = memberExpression.Expression;
-				}
-				metaData = sessionFactory.GetClassMetadata(memberType);
-			}
-
-			if (metaData == null)
-				return false;
-
-			// IDictionary can be mapped as collection or component - is it mapped as a component?
-			var propertyType = metaData.GetPropertyType(memberPath);
-			return (propertyType != null && propertyType.IsComponentType);
+			return TryGetPotentialDynamicComponentDictionaryMember(method, targetObject, arguments, out memberName)
+				&& ExpressionsHelper.TryGetMappedType((ISessionFactoryImplementor) sessionFactory, targetObject, out var mappedType, out _, out _, out _)
+				// IDictionary can be mapped as collection or component - is it mapped as a component?
+				&& mappedType.IsComponentType;
 		}
 
+		// Since 5.4
+		[Obsolete("This method has no more usages and will be removed in a future version")]
 		public static bool IsDynamicComponentDictionaryGetter(MethodCallExpression expression, ISessionFactory sessionFactory, out string memberName)
 		{
 			return IsDynamicComponentDictionaryGetter(expression.Method, expression.Object, expression.Arguments, sessionFactory, out memberName);
 		}
 
+		// Since 5.4
+		[Obsolete("This method has no more usages and will be removed in a future version")]
 		public static bool IsDynamicComponentDictionaryGetter(MethodCallExpression expression, ISessionFactory sessionFactory)
 		{
 			string memberName;
 			return IsDynamicComponentDictionaryGetter(expression, sessionFactory, out memberName);
 		}
 
-
 		public static bool IsNullConstant(Expression expression)
 		{
-			return expression is ConstantExpression &&
-			       expression.Type.IsNullableOrReference() &&
-			       ((ConstantExpression)expression).Value == null;
+			var constantExpression = expression as ConstantExpression;
+			return
+				constantExpression != null &&
+				constantExpression.Type.IsNullableOrReference() &&
+				constantExpression.Value == null;
 		}
-
 
 		public static bool IsBooleanConstant(Expression expression, out bool value)
 		{
@@ -100,6 +55,72 @@ namespace NHibernate.Linq.Visitors
 
 			value = false; // Dummy value.
 			return false;
+		}
+
+		/// <summary>
+		/// Replaces a specific expression in an expression tree with a replacement expression.
+		/// </summary>
+		/// <param name="expression">The expression to search.</param>
+		/// <param name="oldExpression">The expression to search for.</param>
+		/// <param name="newExpression">The expression to replace with.</param>
+		/// <returns></returns>
+		public static Expression Replace(this Expression expression, Expression oldExpression, Expression newExpression)
+		{
+			return ReplacingExpressionVisitor.Replace(oldExpression, newExpression, expression);
+		}
+
+		/// <summary>
+		/// Gets the member path.
+		/// </summary>
+		/// <param name="memberExpression">The member expression.</param>
+		/// <returns></returns>
+		public static string GetMemberPath(this MemberExpression memberExpression)
+		{
+			var path = memberExpression.Member.Name;
+			var parentProp = memberExpression.Expression as MemberExpression;
+			while (parentProp != null)
+			{
+				path = parentProp.Member.Name + "." + path;
+				parentProp = parentProp.Expression as MemberExpression;
+			}
+			return path;
+		}
+
+		internal static bool TryGetPotentialDynamicComponentDictionaryMember(MethodCallExpression expression, out string memberName)
+		{
+			return TryGetPotentialDynamicComponentDictionaryMember(
+				expression.Method,
+				expression.Object,
+				expression.Arguments,
+				out memberName);
+		}
+
+		internal static bool TryGetPotentialDynamicComponentDictionaryMember(
+			MethodInfo method,
+			Expression targetObject,
+			IEnumerable<Expression> arguments,
+			out string memberName)
+		{
+			memberName = null;
+			// A dynamic component must be an IDictionary with a string key.
+			if (method.Name != "get_Item" ||
+			    targetObject.NodeType != ExpressionType.MemberAccess || // Need the owning member (the dictionary).
+			    !(arguments.First() is ConstantExpression key) ||
+			    key.Type != typeof(string) ||
+			    (!typeof(IDictionary).IsAssignableFrom(targetObject.Type) && !typeof(IDictionary<string, object>).IsAssignableFrom(targetObject.Type)))
+			{
+				return false;
+			}
+
+			// The potential member name
+			memberName = (string) key.Value;
+			return true;
+		}
+
+		internal static bool IsMappedAs(MethodInfo methodInfo)
+		{
+			return methodInfo.Name == nameof(LinqExtensionMethods.MappedAs) &&
+			       methodInfo.DeclaringType == typeof(LinqExtensionMethods);
 		}
 	}
 }

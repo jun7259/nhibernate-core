@@ -1,12 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
+using System.Linq;
 using System.Text;
 using NHibernate.Dialect.Function;
 using NHibernate.Dialect.Schema;
-using NHibernate.Mapping;
+using NHibernate.Engine;
 using NHibernate.SqlCommand;
 using NHibernate.SqlTypes;
+using NHibernate.Type;
 using NHibernate.Util;
 using Environment=NHibernate.Cfg.Environment;
 
@@ -44,7 +47,6 @@ namespace NHibernate.Dialect
 			//default:
 			//http://dev.mysql.com/doc/refman/5.0/en/data-type-defaults.html
 
-
 			//string type
 			RegisterColumnType(DbType.AnsiStringFixedLength, "CHAR(255)");
 			RegisterColumnType(DbType.AnsiStringFixedLength, 255, "CHAR($l)");
@@ -64,7 +66,7 @@ namespace NHibernate.Dialect
 			RegisterColumnType(DbType.String, 16777215, "MEDIUMTEXT");
 			//todo: future: add compatibility with decimal???
 			//An unpacked fixed-point number. Behaves like a CHAR column; 
-			//ìunpackedî means the number is stored as a string, using one character for each digit of the value.
+			//‚Äúunpacked‚Äù means the number is stored as a string, using one character for each digit of the value.
 			//M is the total number of digits and D is the number of digits after the decimal point
 			//DECIMAL[(M[,D])] [UNSIGNED] [ZEROFILL]
 
@@ -79,7 +81,9 @@ namespace NHibernate.Dialect
 			RegisterColumnType(DbType.Byte, "TINYINT UNSIGNED");
 			RegisterColumnType(DbType.Currency, "NUMERIC(18,4)");
 			RegisterColumnType(DbType.Decimal, "NUMERIC(19,5)");
-			RegisterColumnType(DbType.Decimal, 19, "NUMERIC($p, $s)");
+			// Prior to version 5, decimal was stored as a string, so it was supporting a huge precision. Limiting to
+			// .Net capabilities.
+			RegisterColumnType(DbType.Decimal, 29, "NUMERIC($p, $s)");
 			RegisterColumnType(DbType.Double, "DOUBLE");
 			//The signed range is -32768 to 32767. The unsigned range is 0 to 65535. 
 			RegisterColumnType(DbType.Int16, "SMALLINT");
@@ -106,6 +110,8 @@ namespace NHibernate.Dialect
 			//special:
 			RegisterColumnType(DbType.Guid, "VARCHAR(40)");
 
+			RegisterKeywords();
+
 			RegisterCastTypes();
 
 			//functions:
@@ -114,9 +120,139 @@ namespace NHibernate.Dialect
 			DefaultProperties[Environment.ConnectionDriver] = "NHibernate.Driver.MySqlDataDriver";
 		}
 
+		#region private static readonly string[] DialectKeywords = { ... }
+
+		private static readonly string[] DialectKeywords =
+		{
+			"accessible",
+			"analyze",
+			"asc",
+			"before",
+			"bit",
+			"cascade",
+			"change",
+			"connection",
+			"contributors",
+			"convert",
+			"database",
+			"databases",
+			"datetime",
+			"day_hour",
+			"day_microsecond",
+			"day_minute",
+			"day_second",
+			"delayed",
+			"desc",
+			"distinctrow",
+			"div",
+			"dual",
+			"elseif",
+			"enclosed",
+			"enum",
+			"escaped",
+			"explain",
+			"float4",
+			"float8",
+			"force",
+			"fulltext",
+			"goto",
+			"high_priority",
+			"hour_microsecond",
+			"hour_minute",
+			"hour_second",
+			"ignore",
+			"index",
+			"infile",
+			"int1",
+			"int2",
+			"int3",
+			"int4",
+			"int8",
+			"key",
+			"keys",
+			"kill",
+			"label",
+			"limit",
+			"linear",
+			"lines",
+			"load",
+			"lock",
+			"long",
+			"longblob",
+			"longtext",
+			"low_priority",
+			"master_ssl_verify_server_cert",
+			"mediumblob",
+			"mediumint",
+			"mediumtext",
+			"middleint",
+			"minute_microsecond",
+			"minute_second",
+			"mod",
+			"no_write_to_binlog",
+			"nvarchar",
+			"optimize",
+			"option",
+			"optionally",
+			"outfile",
+			"purge",
+			"read",
+			"read_only",
+			"read_write",
+			"regexp",
+			"rename",
+			"replace",
+			"require",
+			"restrict",
+			"rlike",
+			"schema",
+			"schemas",
+			"second_microsecond",
+			"separator",
+			"show",
+			"shutdown",
+			"source_ssl_verify_server_cert",
+			"spatial",
+			"sql_big_result",
+			"sql_calc_found_rows",
+			"sql_small_result",
+			"ssl",
+			"starting",
+			"straight_join",
+			"terminated",
+			"text",
+			"tiny int",
+			"tinyblob",
+			"tinyint",
+			"tinytext",
+			"unlock",
+			"unsigned",
+			"upgrade",
+			"usage",
+			"use",
+			"utc_date",
+			"utc_time",
+			"utc_timestamp",
+			"varbinary",
+			"varcharacter",
+			"write",
+			"x509",
+			"xor",
+			"year_month",
+			"zerofill",
+		};
+
+		#endregion
+
+		protected virtual void RegisterKeywords()
+		{
+			RegisterKeywords(DialectKeywords);
+		}
+
 		protected virtual void RegisterFunctions()
 		{
-			RegisterFunction("iif", new StandardSQLFunction("if"));
+			RegisterFunction("iif", new IfSQLFunction());
+			RegisterFunction("mod", new ModulusFunction(true, true));
 
 			RegisterFunction("sign", new StandardSQLFunction("sign", NHibernateUtil.Int32));
 			
@@ -136,10 +272,11 @@ namespace NHibernate.Dialect
 			RegisterFunction("ceiling", new StandardSQLFunction("ceiling"));
 			RegisterFunction("floor", new StandardSQLFunction("floor"));
 			RegisterFunction("round", new StandardSQLFunction("round"));
-			RegisterFunction("truncate", new StandardSQLFunction("truncate"));
-			
+			RegisterFunction("truncate", new StandardSQLFunctionWithRequiredParameters("truncate", new object[] {null, "0"}));
+
 			RegisterFunction("rand", new NoArgSQLFunction("rand", NHibernateUtil.Double));
-			
+			RegisterFunction("random", new NoArgSQLFunction("rand", NHibernateUtil.Double));
+
 			RegisterFunction("power", new StandardSQLFunction("power", NHibernateUtil.Double));
 			
 			RegisterFunction("stddev", new StandardSQLFunction("stddev", NHibernateUtil.Double));
@@ -159,7 +296,7 @@ namespace NHibernate.Dialect
 			RegisterFunction("ucase", new StandardSQLFunction("ucase"));
 			RegisterFunction("lcase", new StandardSQLFunction("lcase"));
 
-			RegisterFunction("chr", new StandardSQLFunction("char", NHibernateUtil.Character));
+			RegisterFunction("chr", new SQLFunctionTemplate(NHibernateUtil.Character, "cast(char(?1) as char)"));
 			RegisterFunction("ascii", new StandardSQLFunction("ascii", NHibernateUtil.Int32));
 			RegisterFunction("instr", new StandardSQLFunction("instr", NHibernateUtil.Int32));
 			RegisterFunction("lpad", new StandardSQLFunction("lpad", NHibernateUtil.String));
@@ -168,7 +305,7 @@ namespace NHibernate.Dialect
 			RegisterFunction("hex", new StandardSQLFunction("hex", NHibernateUtil.String));
 			RegisterFunction("soundex", new StandardSQLFunction("soundex", NHibernateUtil.String));
 
-			RegisterFunction("current_date", new NoArgSQLFunction("current_date", NHibernateUtil.Date, false));
+			RegisterFunction("current_date", new NoArgSQLFunction("current_date", NHibernateUtil.LocalDate, false));
 			RegisterFunction("current_time", new NoArgSQLFunction("current_time", NHibernateUtil.Time, false));
 
 			RegisterFunction("second", new StandardSQLFunction("second", NHibernateUtil.Int32));
@@ -368,15 +505,12 @@ namespace NHibernate.Dialect
 		/// </summary>
 		/// <param name="sqlType">The <see cref="SqlType"/> typecode </param>
 		/// <returns> The database type name </returns>
-		public override string GetCastTypeName(SqlType sqlType)
-		{
-			string result = castTypeNames.Get(sqlType.DbType, Column.DefaultLength, Column.DefaultPrecision, Column.DefaultScale);
-			if (result == null)
-			{
-				throw new HibernateException(string.Format("No CAST() type mapping for SqlType {0}", sqlType));
-			}
-			return result;
-		}
+		public override string GetCastTypeName(SqlType sqlType) =>
+			GetCastTypeName(sqlType, castTypeNames);
+
+		/// <inheritdoc />
+		public override bool TryGetCastTypeName(SqlType sqlType, out string typeName) =>
+			TryGetCastTypeName(sqlType, castTypeNames, out typeName);
 
 		public override long TimestampResolutionInTicks
 		{
@@ -384,6 +518,70 @@ namespace NHibernate.Dialect
 			{
 				// MySQL before version 5.6.4 does not support fractional seconds.
 				return TimeSpan.TicksPerSecond;
+			}
+		}
+
+		/// <summary>
+		/// Does this dialect support concurrent writing connections in the same transaction?
+		/// </summary>
+		/// <remarks>
+		/// NotSupportedException : Multiple simultaneous connections or connections with different 
+		/// connection strings inside the same transaction are not currently supported.
+		/// </remarks>
+		public override bool SupportsConcurrentWritingConnectionsInSameTransaction => false;
+
+		#region Overridden informational metadata
+
+		public override bool SupportsEmptyInList => false;
+
+		public override bool AreStringComparisonsCaseInsensitive => true;
+
+		// note: at least MySQL 5.1 shows this not working...
+		public override bool SupportsLobValueChangePropogation => false;
+
+		public override bool SupportsSubqueryOnMutatingTable => false;
+
+		// v5.7: MySql.Data.MySqlClient.MySqlException : This version of MySQL doesn't yet support 'LIMIT & IN/ALL/ANY/SOME subquery'
+		/// <inheritdoc/>
+		public override bool SupportsSubSelectsWithPagingAsInPredicateRhs => false;
+
+		// v5.7: 
+		/// <inheritdoc/>
+		public override bool SupportsHavingOnGroupedByComputation => false;
+
+		/// <summary>
+		/// Does this dialect support distributed transaction?
+		/// </summary>
+		/// <remarks>
+		/// Fails enlisting a connection into a distributed transaction, fails promoting a transaction
+		/// to distributed when it has already a connection enlisted.
+		/// </remarks>
+		public override bool SupportsDistributedTransactions => false;
+
+		#endregion
+
+		[Serializable]
+		internal class IfSQLFunction : StandardSQLFunction
+		{
+			public IfSQLFunction() : base("if")
+			{
+			}
+
+			/// <inheritdoc />
+			public override IType GetReturnType(IEnumerable<IType> argumentTypes, IMapping mapping, bool throwOnError)
+			{
+				var args = argumentTypes.ToList();
+				if (args.Count != 3)
+				{
+					if (throwOnError)
+					{
+						throw new QueryException($"Invalid number of arguments for iif()");
+					}
+
+					return null;
+				}
+
+				return args[1] ?? args[2];
 			}
 		}
 	}

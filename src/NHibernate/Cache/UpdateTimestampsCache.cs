@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-
+using System.Linq;
 using NHibernate.Cfg;
+using NHibernate.Util;
 
 namespace NHibernate.Cache
 {
@@ -13,98 +13,163 @@ namespace NHibernate.Cache
 	/// recommend that the the underlying cache not be configured for expiry at all.
 	/// Note, in particular, that an LRU cache expiry policy is never appropriate.
 	/// </summary>
-	public class UpdateTimestampsCache
+	public partial class UpdateTimestampsCache
 	{
-		private static readonly IInternalLogger log = LoggerProvider.LoggerFor(typeof(UpdateTimestampsCache));
-		private ICache updateTimestamps;
+		private static readonly INHibernateLogger log = NHibernateLogger.For(typeof(UpdateTimestampsCache));
+		private readonly CacheBase _updateTimestamps;
 
-		private readonly string regionName = typeof(UpdateTimestampsCache).Name;
-
-		public void Clear()
+		public virtual void Clear()
 		{
-			updateTimestamps.Clear();
+			_updateTimestamps.Clear();
 		}
 
+		// Since v5.3
+		[Obsolete("Please use overload with a CacheBase parameter.")]
 		public UpdateTimestampsCache(Settings settings, IDictionary<string, string> props)
+			: this(
+				CacheFactory.BuildCacheBase(
+					settings.GetFullCacheRegionName(nameof(UpdateTimestampsCache)),
+					settings,
+					props))
 		{
-			string prefix = settings.CacheRegionPrefix;
-			regionName = prefix == null ? regionName : prefix + '.' + regionName;
-			log.Info("starting update timestamps cache at region: " + regionName);
-			updateTimestamps = settings.CacheProvider.BuildCache(regionName, props);
 		}
 
-		[MethodImpl(MethodImplOptions.Synchronized)]
+		/// <summary>
+		/// Build the update timestamps cache.
+		/// </summary>x
+		/// <param name="cache">The <see cref="ICache" /> to use.</param>
+		public UpdateTimestampsCache(CacheBase cache)
+		{
+			log.Info("starting update timestamps cache at region: {0}", cache.RegionName);
+			_updateTimestamps = cache;
+		}
+
+		//Since v5.1
+		[Obsolete("Please use PreInvalidate(IReadOnlyCollection<string>) instead.")]
 		public void PreInvalidate(object[] spaces)
 		{
+			//Only for backwards compatibility.
+			PreInvalidate(spaces.OfType<string>().ToList());
+		}
+
+		public virtual void PreInvalidate(IReadOnlyCollection<string> spaces)
+		{
+			if (spaces.Count == 0)
+				return;
+
 			//TODO: to handle concurrent writes correctly, this should return a Lock to the client
-			long ts = updateTimestamps.NextTimestamp() + updateTimestamps.Timeout;
-			for (int i = 0; i < spaces.Length; i++)
-			{
-				updateTimestamps.Put(spaces[i], ts);
-			}
+			var ts = _updateTimestamps.NextTimestamp() + _updateTimestamps.Timeout;
+			SetSpacesTimestamp(spaces, ts);
 			//TODO: return new Lock(ts);
 		}
 
-		/// <summary></summary>
-		[MethodImpl(MethodImplOptions.Synchronized)]
+		//Since v5.1
+		[Obsolete("Please use Invalidate(IReadOnlyCollection<string>) instead.")]
 		public void Invalidate(object[] spaces)
 		{
+			//Only for backwards compatibility.
+			Invalidate(spaces.OfType<string>().ToList());
+		}
+
+		public virtual void Invalidate(IReadOnlyCollection<string> spaces)
+		{
+			if (spaces.Count == 0)
+				return;
+
 			//TODO: to handle concurrent writes correctly, the client should pass in a Lock
-			long ts = updateTimestamps.NextTimestamp();
+			long ts = _updateTimestamps.NextTimestamp();
 			//TODO: if lock.getTimestamp().equals(ts)
-			for (int i = 0; i < spaces.Length; i++)
-			{
-				log.Debug(string.Format("Invalidating space [{0}]", spaces[i]));
-				updateTimestamps.Put(spaces[i], ts);
-			}
+			if (log.IsDebugEnabled())
+				log.Debug("Invalidating spaces [{0}]", StringHelper.CollectionToString(spaces));
+			SetSpacesTimestamp(spaces, ts);
 		}
 
-		[MethodImpl(MethodImplOptions.Synchronized)]
-		public bool IsUpToDate(ISet<string> spaces, long timestamp /* H2.1 has Long here */)
+		private void SetSpacesTimestamp(IReadOnlyCollection<string> spaces, long ts)
 		{
-			foreach (string space in spaces)
-			{
-				object lastUpdate = updateTimestamps.Get(space);
-				if (lastUpdate == null)
-				{
-					//the last update timestamp was lost from the cache
-					//(or there were no updates since startup!)
-
-					//NOTE: commented out, since users found the "safe" behavior
-					//      counter-intuitive when testing, and we couldn't deal
-					//      with all the forum posts :-(
-					//updateTimestamps.put( space, new Long( updateTimestamps.nextTimestamp() ) );
-					//result = false; // safer
-
-					//OR: put a timestamp there, to avoid subsequent expensive
-					//    lookups to a distributed cache - this is no good, since
-					//    it is non-threadsafe (could hammer effect of an actual
-					//    invalidation), and because this is not the way our
-					//    preferred distributed caches work (they work by
-					//    replication)
-					//updateTimestamps.put( space, new Long(Long.MIN_VALUE) );
-				}
-				else
-				{
-					if ((long) lastUpdate >= timestamp)
-					{
-						return false;
-					}
-				}
-			}
-			return true;
+			_updateTimestamps.PutMany(
+				spaces.ToArray<object>(),
+				ArrayHelper.Fill<object>(ts, spaces.Count));
 		}
 
-		public void Destroy()
+		public virtual bool IsUpToDate(ISet<string> spaces, long timestamp /* H2.1 has Long here */)
 		{
-			try
+			if (spaces.Count == 0)
+				return true;
+
+			var lastUpdates = _updateTimestamps.GetMany(spaces.ToArray<object>());
+			return lastUpdates.All(lastUpdate => !IsOutdated(lastUpdate as long?, timestamp));
+		}
+
+		public virtual bool[] AreUpToDate(ISet<string>[] spaces, long[] timestamps)
+		{
+			if (spaces.Length == 0)
+				return Array.Empty<bool>();
+
+			var allSpaces = new HashSet<string>();
+			foreach (var sp in spaces)
 			{
-				updateTimestamps.Destroy();
+				allSpaces.UnionWith(sp);
 			}
-			catch (Exception e)
+
+			if (allSpaces.Count == 0)
+				return ArrayHelper.Fill(true, spaces.Length);
+
+			var keys = allSpaces.ToArray<object>();
+
+			var index = 0;
+			var lastUpdatesBySpace =
+				_updateTimestamps
+					.GetMany(keys)
+					.ToDictionary(u => keys[index++], u => u as long?);
+
+			var results = new bool[spaces.Length];
+			for (var i = 0; i < spaces.Length; i++)
 			{
-				log.Warn("could not destroy UpdateTimestamps cache", e);
+				var timestamp = timestamps[i];
+				results[i] = spaces[i].All(space => !IsOutdated(lastUpdatesBySpace[space], timestamp));
 			}
+
+			return results;
+		}
+
+		// Since v5.3
+		[Obsolete("This method has no usages anymore")]
+		public virtual void Destroy()
+		{
+			// The cache is externally provided and may be shared. Destroying the cache is
+			// not the responsibility of this class.
+		}
+
+		private static bool IsOutdated(long? lastUpdate, long timestamp)
+		{
+			if (!lastUpdate.HasValue)
+			{
+				//the last update timestamp was lost from the cache
+				//(or there were no updates since startup!)
+
+				//NOTE: commented out, since users found the "safe" behavior
+				//      counter-intuitive when testing, and we couldn't deal
+				//      with all the forum posts :-(
+				//updateTimestamps.put( space, new Long( updateTimestamps.nextTimestamp() ) );
+				//result = false; // safer
+
+				//OR: put a timestamp there, to avoid subsequent expensive
+				//    lookups to a distributed cache - this is no good, since
+				//    it is non-threadsafe (could hammer effect of an actual
+				//    invalidation), and because this is not the way our
+				//    preferred distributed caches work (they work by
+				//    replication)
+				//updateTimestamps.put( space, new Long(Long.MIN_VALUE) );
+			}
+			else
+			{
+				if (lastUpdate >= timestamp)
+				{
+					return true;
+				}
+			}
+
+			return false;
 		}
 	}
 }

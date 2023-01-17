@@ -7,13 +7,12 @@ namespace NHibernate.Test.MappingByCode
 {
 	public class MyEntity
 	{
-
 	}
 	public class MyGenericEntity<T>
 	{
-
 	}
 
+	[TestFixture]
 	public class TypeNameUtilTests
 	{
 		[Test]
@@ -77,7 +76,7 @@ namespace NHibernate.Test.MappingByCode
 			var mapDoc = new HbmMapping();
 			mapDoc.assembly = "whatever";
 			mapDoc.@namespace = typeof(MyEntity).Namespace;
-			Assert.That(typeof(MyEntity).GetShortClassName(mapDoc), Is.StringStarting(typeof(MyEntity).Name).And.EndsWith(", " + typeof(MyEntity).Assembly.GetName().Name));
+			Assert.That(typeof(MyEntity).GetShortClassName(mapDoc), Does.StartWith(typeof(MyEntity).Name).And.EndsWith(", " + typeof(MyEntity).Assembly.GetName().Name));
 		}
 
 		[Test]
@@ -134,7 +133,7 @@ namespace NHibernate.Test.MappingByCode
 			var mapDoc = new HbmMapping();
 			mapDoc.assembly = "whatever";
 			mapDoc.@namespace = typeof(MyGenericEntity<>).Namespace;
-			Assert.That(typeof(MyGenericEntity<int>).GetShortClassName(mapDoc), Is.StringStarting(typeof(MyGenericEntity<int>).FullName).And.EndsWith(", " + typeof(MyGenericEntity<int>).Assembly.GetName().Name));
+			Assert.That(typeof(MyGenericEntity<int>).GetShortClassName(mapDoc), Does.StartWith(typeof(MyGenericEntity<int>).FullName).And.EndsWith(", " + typeof(MyGenericEntity<int>).Assembly.GetName().Name));
 		}
 	}
 }

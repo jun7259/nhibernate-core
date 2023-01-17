@@ -1,6 +1,6 @@
 using System;
 using System.Linq;
-using System.Data;
+using System.Data.Common;
 using NHibernate.Cfg.MappingSchema;
 using NHibernate.Engine;
 using NHibernate.Mapping.ByCode;
@@ -13,6 +13,7 @@ using NUnit.Framework;
 
 namespace NHibernate.Test.MappingByCode.MappersTests
 {
+	[TestFixture]
 	public class PropertyMapperTest
 	{
 		private enum MyEnum
@@ -36,7 +37,6 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 
 			public void Access(System.Type accessorType)
 			{
-				
 			}
 		}
 		[Test]
@@ -81,7 +81,7 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 			var mapper = new PropertyMapper(member, mapping);
 			mapper.Type<MyType>();
 
-			Assert.That(mapping.Type.name, Is.StringContaining("MyType"));
+			Assert.That(mapping.Type.name, Does.Contain("MyType"));
 			Assert.That(mapping.type, Is.Null);
 		}
 
@@ -93,7 +93,7 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 			var mapper = new PropertyMapper(member, mapping);
 			mapper.Type<MyCompoType>();
 
-			Assert.That(mapping.Type.name, Is.StringContaining("MyCompoType"));
+			Assert.That(mapping.Type.name, Does.Contain("MyCompoType"));
 			Assert.That(mapping.type, Is.Null);
 		}
 
@@ -106,7 +106,7 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 			mapper.Type<MyType>(new { Param1 = "a", Param2 = 12 });
 
 			Assert.That(mapping.type1, Is.Null);
-			Assert.That(mapping.Type.name, Is.StringContaining("MyType"));
+			Assert.That(mapping.Type.name, Does.Contain("MyType"));
 			Assert.That(mapping.Type.param, Has.Length.EqualTo(2));
 			Assert.That(mapping.Type.param.Select(p => p.name), Is.EquivalentTo(new [] {"Param1", "Param2"}));
 			Assert.That(mapping.Type.param.Select(p => p.GetText()), Is.EquivalentTo(new [] {"a", "12"}));
@@ -120,7 +120,7 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 			var mapper = new PropertyMapper(member, mapping);
 			mapper.Type<MyType>(null);
 
-			Assert.That(mapping.Type.name, Is.StringContaining("MyType"));
+			Assert.That(mapping.Type.name, Does.Contain("MyType"));
 			Assert.That(mapping.type, Is.Null);
 		}
 
@@ -132,7 +132,7 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 			var mapper = new PropertyMapper(member, mapping);
 			mapper.Type<EnumStringType<MyEnum>>();
 
-			Assert.That(mapping.Type.name, Is.StringContaining(typeof(EnumStringType<MyEnum>).FullName));
+			Assert.That(mapping.Type.name, Does.Contain(typeof(EnumStringType<MyEnum>).FullName));
 			Assert.That(mapping.type, Is.Null);
 		}
 
@@ -284,6 +284,40 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 		}
 
 		[Test]
+		public void CanSetColumnsAndFormulas()
+		{
+			var member = typeof(MyClass).GetProperty("Autoproperty");
+			var mapping = new HbmProperty();
+			IPropertyMapper mapper = new PropertyMapper(member, mapping);
+			mapper.ColumnsAndFormulas(x => x.Name("pizza"), x => x.Formula("risotto"), x => x.Name("pasta"));
+
+			Assert.That(mapping.Items, Has.Length.EqualTo(3));
+			Assert.That(mapping.Items[0], Is.TypeOf<HbmColumn>(), "first");
+			Assert.That(mapping.Items[1], Is.TypeOf<HbmFormula>(), "second");
+			Assert.That(mapping.Items[2], Is.TypeOf<HbmColumn>(), "third");
+			Assert.That(((HbmColumn)mapping.Items[0]).name, Is.EqualTo("pizza"));
+			Assert.That(((HbmFormula)mapping.Items[1]).Text, Has.Length.EqualTo(1).And.One.EqualTo("risotto"));
+			Assert.That(((HbmColumn)mapping.Items[2]).name, Is.EqualTo("pasta"));
+			Assert.That(mapping.column, Is.Null, "column");
+			Assert.That(mapping.formula, Is.Null, "formula");
+		}
+
+		[Test]
+		public void CanSetMultipleFormulas()
+		{
+			var member = typeof(MyClass).GetProperty("Autoproperty");
+			var mapping = new HbmProperty();
+			IPropertyMapper mapper = new PropertyMapper(member, mapping);
+			mapper.Formulas("formula1", "formula2", "formula3");
+
+			Assert.That(mapping.formula, Is.Null);
+			Assert.That(mapping.Items, Has.Length.EqualTo(3));
+			Assert.That(
+				mapping.Items.Cast<HbmFormula>().Select(f => f.Text.Single()),
+				Is.EquivalentTo(new[] { "formula1", "formula2", "formula3" }));
+		}
+
+		[Test]
 		public void WhenSetUpdateThenSetAttributes()
 		{
 			var member = For<MyClass>.Property(x => x.ReadOnly);
@@ -324,7 +358,7 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 	{
 		#region Implementation of IUserType
 
-		public bool Equals(object x, object y)
+		public new bool Equals(object x, object y)
 		{
 			throw new NotImplementedException();
 		}
@@ -334,12 +368,12 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 			throw new NotImplementedException();
 		}
 
-		public object NullSafeGet(IDataReader rs, string[] names, object owner)
+		public object NullSafeGet(DbDataReader rs, string[] names, ISessionImplementor session, object owner)
 		{
 			throw new NotImplementedException();
 		}
 
-		public void NullSafeSet(IDbCommand cmd, object value, int index)
+		public void NullSafeSet(DbCommand cmd, object value, int index, ISessionImplementor session)
 		{
 			throw new NotImplementedException();
 		}
@@ -394,7 +428,7 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 			throw new NotImplementedException();
 		}
 
-		public bool Equals(object x, object y)
+		public new bool Equals(object x, object y)
 		{
 			throw new NotImplementedException();
 		}
@@ -404,12 +438,12 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 			throw new NotImplementedException();
 		}
 
-		public object NullSafeGet(IDataReader dr, string[] names, ISessionImplementor session, object owner)
+		public object NullSafeGet(DbDataReader dr, string[] names, ISessionImplementor session, object owner)
 		{
 			throw new NotImplementedException();
 		}
 
-		public void NullSafeSet(IDbCommand cmd, object value, int index, bool[] settable, ISessionImplementor session)
+		public void NullSafeSet(DbCommand cmd, object value, int index, bool[] settable, ISessionImplementor session)
 		{
 			throw new NotImplementedException();
 		}

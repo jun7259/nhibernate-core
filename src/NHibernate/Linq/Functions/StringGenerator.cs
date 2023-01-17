@@ -1,14 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using NHibernate.Hql.Ast;
 using NHibernate.Linq.Visitors;
+using NHibernate.Util;
 
 namespace NHibernate.Linq.Functions
 {
-	public class LikeGenerator : IHqlGeneratorForMethod, IRuntimeMethodHqlGenerator
+	public class LikeGenerator : IHqlGeneratorForMethod, IRuntimeMethodHqlGenerator, IHqlGeneratorForMethodExtended
 	{
 		public IEnumerable<MethodInfo> SupportedMethods
 		{
@@ -18,9 +20,21 @@ namespace NHibernate.Linq.Functions
 		public HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments,
 		                            HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
 		{
-			return treeBuilder.Like(
-				visitor.Visit(arguments[0]).AsExpression(),
-				visitor.Visit(arguments[1]).AsExpression());
+			if (arguments.Count == 2)
+			{
+				return treeBuilder.Like(
+					visitor.Visit(arguments[0]).AsExpression(),
+					visitor.Visit(arguments[1]).AsExpression());
+			}
+			if (arguments[2].NodeType == ExpressionType.Constant)
+			{
+				var escapeCharExpression = (ConstantExpression)arguments[2];
+				return treeBuilder.Like(
+					visitor.Visit(arguments[0]).AsExpression(),
+					visitor.Visit(arguments[1]).AsExpression(),
+					treeBuilder.Constant(escapeCharExpression.Value));
+			}
+			throw new ArgumentException("The escape character must be specified as literal value or a string variable");
 		}
 
 		public bool SupportsMethod(MethodInfo method)
@@ -34,7 +48,7 @@ namespace NHibernate.Linq.Functions
 			// to avoid referencing Linq2Sql or Linq2NHibernate, if they so wish.
 
 			return method != null && method.Name == "Like" &&
-			       method.GetParameters().Length == 2 &&
+			       (method.GetParameters().Length == 2 || method.GetParameters().Length == 3) &&
 			       method.DeclaringType != null &&
 			       method.DeclaringType.FullName.EndsWith("SqlMethods");
 		}
@@ -43,14 +57,22 @@ namespace NHibernate.Linq.Functions
 		{
 			return this;
 		}
-	}
 
+		public bool AllowsNullableReturnType(MethodInfo method) => false;
+
+		/// <inheritdoc />
+		public bool TryGetCollectionParameter(MethodCallExpression expression, out ConstantExpression collectionParameter)
+		{
+			collectionParameter = null;
+			return false;
+		}
+	}
 
 	public class LengthGenerator : BaseHqlGeneratorForProperty
 	{
 		public LengthGenerator()
 		{
-			SupportedProperties = new[] { ReflectionHelper.GetProperty((string x) => x.Length) };
+			SupportedProperties = new[] { ReflectHelper.GetProperty((string x) => x.Length) };
 		}
 
 		public override HqlTreeNode BuildHql(MemberInfo member, Expression expression, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
@@ -61,13 +83,18 @@ namespace NHibernate.Linq.Functions
 
 	public class StartsWithGenerator : BaseHqlGeneratorForMethod
 	{
+		private static readonly MethodInfo MethodWithComparer = ReflectHelper.GetMethodDefinition<string>(x => x.StartsWith(null, default(StringComparison)));
+
 		public StartsWithGenerator()
 		{
-			SupportedMethods = new[] { ReflectionHelper.GetMethodDefinition<string>(x => x.StartsWith(null)) };
+			SupportedMethods = new[] {ReflectHelper.GetMethodDefinition<string>(x => x.StartsWith(null)), MethodWithComparer};
 		}
+
+		public override bool AllowsNullableReturnType(MethodInfo method) => false;
 
 		public override HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
 		{
+			LogIgnoredStringComparisonParameter(method, MethodWithComparer);
 			return treeBuilder.Like(
 					visitor.Visit(targetObject).AsExpression(),
 					treeBuilder.Concat(
@@ -78,13 +105,18 @@ namespace NHibernate.Linq.Functions
 
 	public class EndsWithGenerator : BaseHqlGeneratorForMethod
 	{
+		private static readonly MethodInfo MethodWithComparer = ReflectHelper.GetMethodDefinition<string>(x => x.EndsWith(null, default(StringComparison)));
+
 		public EndsWithGenerator()
 		{
-			SupportedMethods = new[] { ReflectionHelper.GetMethodDefinition<string>(x => x.EndsWith(null)) };
+			SupportedMethods = new[] {ReflectHelper.GetMethodDefinition<string>(x => x.EndsWith(null)), MethodWithComparer,};
 		}
+
+		public override bool AllowsNullableReturnType(MethodInfo method) => false;
 
 		public override HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
 		{
+			LogIgnoredStringComparisonParameter(method, MethodWithComparer);
 			return treeBuilder.Like(
 					visitor.Visit(targetObject).AsExpression(),
 					treeBuilder.Concat(
@@ -97,8 +129,10 @@ namespace NHibernate.Linq.Functions
 	{
 		public ContainsGenerator()
 		{
-			SupportedMethods = new[] { ReflectionHelper.GetMethodDefinition<string>(x => x.Contains(null)) };
+			SupportedMethods = new[] { ReflectHelper.GetMethodDefinition<string>(x => x.Contains(null)) };
 		}
+
+		public override bool AllowsNullableReturnType(MethodInfo method) => false;
 
 		public override HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
 		{
@@ -117,8 +151,8 @@ namespace NHibernate.Linq.Functions
 		{
 			SupportedMethods = new[]
 									{
-										ReflectionHelper.GetMethodDefinition<string>(x => x.ToLower()),
-										ReflectionHelper.GetMethodDefinition<string>(x => x.ToLowerInvariant())
+										ReflectHelper.GetMethodDefinition<string>(x => x.ToLower()),
+										ReflectHelper.GetMethodDefinition<string>(x => x.ToLowerInvariant())
 									};
 		}
 
@@ -134,8 +168,8 @@ namespace NHibernate.Linq.Functions
 		{
 			SupportedMethods = new[]
 									{
-										ReflectionHelper.GetMethodDefinition<string>(x => x.ToUpper()),
-										ReflectionHelper.GetMethodDefinition<string>(x => x.ToUpperInvariant()),
+										ReflectHelper.GetMethodDefinition<string>(x => x.ToUpper()),
+										ReflectHelper.GetMethodDefinition<string>(x => x.ToUpperInvariant()),
 									};
 		}
 
@@ -151,8 +185,8 @@ namespace NHibernate.Linq.Functions
 		{
 			SupportedMethods = new[]
 									{
-										ReflectionHelper.GetMethodDefinition<string>(s => s.Substring(0)),
-										ReflectionHelper.GetMethodDefinition<string>(s => s.Substring(0, 0))
+										ReflectHelper.GetMethodDefinition<string>(s => s.Substring(0)),
+										ReflectHelper.GetMethodDefinition<string>(s => s.Substring(0, 0))
 									};
 		}
 
@@ -168,52 +202,99 @@ namespace NHibernate.Linq.Functions
 			return treeBuilder.MethodCall("substring", stringExpr, start, length);
 		}
 	}
+	
+	public class GetCharsGenerator : BaseHqlGeneratorForMethod
+	{
+		public GetCharsGenerator()
+		{
+			SupportedMethods = new[]
+			{
+				ReflectHelper.GetMethod<string, char>(s => s[0])
+			};
+		}
+
+		public override HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
+		{
+			var expression = visitor.Visit(targetObject).AsExpression();
+			var index = treeBuilder.Add(visitor.Visit(arguments[0]).AsExpression(), treeBuilder.Constant(1));
+			return treeBuilder.MethodCall("substring", expression, index, treeBuilder.Constant(1));
+		}
+	}
 
 	public class IndexOfGenerator : BaseHqlGeneratorForMethod
 	{
+		private static readonly MethodInfo MethodWithComparer1 = ReflectHelper.GetMethodDefinition<string>(x => x.IndexOf(string.Empty, default(StringComparison)));
+		private static readonly MethodInfo MethodWithComparer2 = ReflectHelper.GetMethodDefinition<string>(x => x.IndexOf(string.Empty, 0, default(StringComparison)));
+
 		public IndexOfGenerator()
 		{
 			SupportedMethods = new[]
 									{
-										ReflectionHelper.GetMethodDefinition<string>(s => s.IndexOf(' ')),
-										ReflectionHelper.GetMethodDefinition<string>(s => s.IndexOf(" ")),
-										ReflectionHelper.GetMethodDefinition<string>(s => s.IndexOf(' ', 0)),
-										ReflectionHelper.GetMethodDefinition<string>(s => s.IndexOf(" ", 0))
+										ReflectHelper.GetMethodDefinition<string>(s => s.IndexOf(' ')),
+										ReflectHelper.GetMethodDefinition<string>(s => s.IndexOf(" ")),
+										ReflectHelper.GetMethodDefinition<string>(s => s.IndexOf(' ', 0)),
+										ReflectHelper.GetMethodDefinition<string>(s => s.IndexOf(" ", 0)),
+										MethodWithComparer1,
+										MethodWithComparer2,
 									};
 		}
 		public override HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
 		{
-			if (arguments.Count == 1)
+			var argsCount = arguments.Count;
+			if (LogIgnoredStringComparisonParameter(method, MethodWithComparer1, MethodWithComparer2))
 			{
-				return treeBuilder.MethodCall("locate",
-						visitor.Visit(arguments[0]).AsExpression(),
-						visitor.Visit(targetObject).AsExpression());//,
-						//treeBuilder.Constant(0));
+				//StringComparison is last argument, just ignore it
+				argsCount--;
 			}
-			return treeBuilder.MethodCall("locate",
+
+			HqlMethodCall locate;
+			if (argsCount == 1)
+			{
+				locate = treeBuilder.MethodCall("locate",
 					visitor.Visit(arguments[0]).AsExpression(),
-					visitor.Visit(targetObject).AsExpression(),
-					visitor.Visit(arguments[1]).AsExpression());
+					visitor.Visit(targetObject).AsExpression()); //,
+				//treeBuilder.Constant(0));
+			}
+			else
+			{
+				var start = treeBuilder.Add(visitor.Visit(arguments[1]).AsExpression(), treeBuilder.Constant(1));
+				locate = treeBuilder.MethodCall("locate",
+							visitor.Visit(arguments[0]).AsExpression(),
+							visitor.Visit(targetObject).AsExpression(),
+							start);
+			}
+			return treeBuilder.Subtract(locate,treeBuilder.Constant(1));
 		}
 	}
 
 	public class ReplaceGenerator : BaseHqlGeneratorForMethod
 	{
+#if NETCOREAPP2_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER  
+		private static readonly MethodInfo MethodWithComparer = ReflectHelper.GetMethodDefinition<string>(x => x.Replace(string.Empty, string.Empty, default(StringComparison)));
+#endif
+
 		public ReplaceGenerator()
 		{
 			SupportedMethods = new[]
-									{
-										ReflectionHelper.GetMethodDefinition<string>(s => s.Replace(' ', ' ')),
-										ReflectionHelper.GetMethodDefinition<string>(s => s.Replace("", ""))
-									};
+			{
+				ReflectHelper.GetMethodDefinition<string>(s => s.Replace(' ', ' ')),
+				ReflectHelper.GetMethodDefinition<string>(s => s.Replace("", "")),
+#if NETCOREAPP2_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+				MethodWithComparer,
+#endif
+			};
 		}
 
 		public override HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
 		{
-			return treeBuilder.MethodCall("replace",
-																		visitor.Visit(targetObject).AsExpression(),
-																		visitor.Visit(arguments[0]).AsExpression(),
-																		visitor.Visit(arguments[1]).AsExpression());
+#if NETCOREAPP2_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+			LogIgnoredStringComparisonParameter(method, MethodWithComparer);
+#endif
+			return treeBuilder.MethodCall(
+				"replace",
+				visitor.Visit(targetObject).AsExpression(),
+				visitor.Visit(arguments[0]).AsExpression(),
+				visitor.Visit(arguments[1]).AsExpression());
 		}
 	}
 
@@ -221,13 +302,7 @@ namespace NHibernate.Linq.Functions
 	{
 		public TrimGenerator()
 		{
-			SupportedMethods = new[]
-									{
-										ReflectionHelper.GetMethodDefinition<string>(s => s.Trim()),
-										ReflectionHelper.GetMethodDefinition<string>(s => s.Trim('a')),
-										ReflectionHelper.GetMethodDefinition<string>(s => s.TrimStart('a')),
-										ReflectionHelper.GetMethodDefinition<string>(s => s.TrimEnd('a'))
-									};
+			SupportedMethods = typeof(string).GetMethods().Where(x => new[] { "Trim", "TrimStart", "TrimEnd" }.Contains(x.Name)).ToArray();
 		}
 
 		public override HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
@@ -240,13 +315,9 @@ namespace NHibernate.Linq.Functions
 			else
 				trimWhere = "both";
 
-			string trimChars = "";
-			if (method.GetParameters().Length > 0)
-				foreach (char c in (char[])((ConstantExpression)arguments[0]).Value)
-					trimChars += c;
+			var trimChars = ExtractTrimChars(arguments);
 
-
-			if (trimChars == "")
+			if (string.IsNullOrEmpty(trimChars))
 			{
 				return treeBuilder.MethodCall("trim", treeBuilder.Ident(trimWhere), treeBuilder.Ident("from"), visitor.Visit(targetObject).AsExpression());
 			}
@@ -254,6 +325,20 @@ namespace NHibernate.Linq.Functions
 			{
 				return treeBuilder.MethodCall("trim", treeBuilder.Ident(trimWhere), treeBuilder.Constant(trimChars), treeBuilder.Ident("from"), visitor.Visit(targetObject).AsExpression());
 			}
+		}
+
+		private static string ExtractTrimChars(IReadOnlyList<Expression> arguments)
+		{
+			if (arguments.Count > 0)
+			{
+				var constantExpression = (ConstantExpression) arguments[0];
+				if (constantExpression.Value is char c)
+					return c.ToString();
+				if (constantExpression.Value is char[] chars)
+					return new string(chars);
+			}
+
+			return string.Empty;
 		}
 	}
 
@@ -274,14 +359,15 @@ namespace NHibernate.Linq.Functions
 
 	public class ToStringHqlGeneratorForMethod : IHqlGeneratorForMethod
 	{
-		public IEnumerable<MethodInfo> SupportedMethods
-		{
-			get { throw new NotSupportedException(); }
-		}
+		public IEnumerable<MethodInfo> SupportedMethods => throw new NotSupportedException();
 
 		public HqlTreeNode BuildHql(MethodInfo method, Expression targetObject, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
 		{
-			return treeBuilder.MethodCall("str", visitor.Visit(targetObject).AsExpression());
+			var methodName = targetObject.Type == typeof(Guid) || targetObject.Type == typeof(Guid?)
+				? "strguid"
+				: "str";
+
+			return treeBuilder.MethodCall(methodName, visitor.Visit(targetObject).AsExpression());
 		}
 	}
 }

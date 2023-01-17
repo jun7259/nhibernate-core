@@ -58,8 +58,8 @@ namespace NHibernate.Test.NHSpecificTest.NH1274ExportExclude
 				Assert.IsTrue(s.Contains("drop table Home_All"));
 			}
 
-			Assert.IsTrue(s.Contains("create table Home_All"));
-			Assert.IsTrue(s.Contains("create table Home_Export"));
+			Assert.That(s, Does.Match("create ((column|row) )?table Home_All"));
+			Assert.That(s, Does.Match("create ((column|row) )?table Home_Export"));
 		}
 
 		[Test]
@@ -71,8 +71,8 @@ namespace NHibernate.Test.NHSpecificTest.NH1274ExportExclude
 			update.Execute(tw.WriteLine, false);
 
 			string s = tw.ToString();
-			Assert.IsTrue(s.Contains("create table Home_Update"));
-			Assert.IsTrue(s.Contains("create table Home_All"));
+			Assert.That(s, Does.Match("create ((column|row) )?table Home_Update"));
+			Assert.That(s, Does.Match("create ((column|row) )?table Home_All"));
 		}
 
 		[Test]
@@ -80,16 +80,12 @@ namespace NHibernate.Test.NHSpecificTest.NH1274ExportExclude
 		{
 			Configuration configuration = GetConfiguration();
 			SchemaValidator validator = new SchemaValidator(configuration);
-			try
-			{
-				validator.Validate();
-			}
-			catch (HibernateException he)
-			{
-				Assert.IsTrue(he.Message.Contains("Home_Validate"));
-				return;
-			}
-			throw new Exception("Should not get to this exception");
+
+			Assert.That(
+				() => validator.Validate(),
+				Throws.TypeOf<SchemaValidationException>()
+				      .And.Message.EqualTo("Schema validation failed: see list of validation errors")
+				      .And.Property("ValidationErrors").Contains("Missing table: Home_Validate"));
 		}
 
 		private Configuration GetConfiguration()
@@ -106,7 +102,6 @@ namespace NHibernate.Test.NHSpecificTest.NH1274ExportExclude
 			}
 			return cfg;
 		}
-
 
 		protected static string MappingsAssembly
 		{

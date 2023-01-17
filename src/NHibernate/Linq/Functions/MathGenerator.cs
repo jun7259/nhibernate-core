@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using NHibernate.Hql.Ast;
 using NHibernate.Linq.Visitors;
+using NHibernate.Util;
 
 namespace NHibernate.Linq.Functions
 {
@@ -12,51 +13,75 @@ namespace NHibernate.Linq.Functions
 		public MathGenerator()
 		{
 			SupportedMethods = new[]
-								   {
-									   ReflectionHelper.GetMethodDefinition(() => Math.Sin(default(double))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Cos(default(double))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Tan(default(double))),
-									   
-									   ReflectionHelper.GetMethodDefinition(() => Math.Sinh(default(double))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Cosh(default(double))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Tanh(default(double))),
-									   
-									   ReflectionHelper.GetMethodDefinition(() => Math.Asin(default(double))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Acos(default(double))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Atan(default(double))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Atan2(default(double), default(double))),
+			{
+				ReflectHelper.FastGetMethod(Math.Sin, default(double)),
+				ReflectHelper.FastGetMethod(Math.Cos, default(double)),
+				ReflectHelper.FastGetMethod(Math.Tan, default(double)),
 
-									   ReflectionHelper.GetMethodDefinition(() => Math.Sqrt(default(double))),
-									   
-									   ReflectionHelper.GetMethodDefinition(() => Math.Abs(default(decimal))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Abs(default(double))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Abs(default(float))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Abs(default(long))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Abs(default(int))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Abs(default(short))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Abs(default(sbyte))),
-									   
-									   ReflectionHelper.GetMethodDefinition(() => Math.Sign(default(decimal))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Sign(default(double))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Sign(default(float))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Sign(default(long))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Sign(default(int))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Sign(default(short))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Sign(default(sbyte))),
-									   
-									   ReflectionHelper.GetMethodDefinition(() => Math.Round(default(decimal))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Round(default(decimal), default(int))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Round(default(double))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Round(default(double), default(int))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Floor(default(decimal))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Floor(default(double))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Ceiling(default(decimal))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Ceiling(default(double))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Truncate(default(decimal))),
-									   ReflectionHelper.GetMethodDefinition(() => Math.Truncate(default(double))),
+				ReflectHelper.FastGetMethod(Math.Sinh, default(double)),
+				ReflectHelper.FastGetMethod(Math.Cosh, default(double)),
+				ReflectHelper.FastGetMethod(Math.Tanh, default(double)),
 
-									   ReflectionHelper.GetMethodDefinition(() => Math.Pow(default(double), default(double))),
-								   };
+				ReflectHelper.FastGetMethod(Math.Asin, default(double)),
+				ReflectHelper.FastGetMethod(Math.Acos, default(double)),
+				ReflectHelper.FastGetMethod(Math.Atan, default(double)),
+				ReflectHelper.FastGetMethod(Math.Atan2, default(double), default(double)),
+
+				ReflectHelper.FastGetMethod(Math.Sqrt, default(double)),
+
+				ReflectHelper.FastGetMethod(Math.Abs, default(decimal)),
+				ReflectHelper.FastGetMethod(Math.Abs, default(double)),
+				ReflectHelper.FastGetMethod(Math.Abs, default(float)),
+				ReflectHelper.FastGetMethod(Math.Abs, default(long)),
+				ReflectHelper.FastGetMethod(Math.Abs, default(int)),
+				ReflectHelper.FastGetMethod(Math.Abs, default(short)),
+				ReflectHelper.FastGetMethod(Math.Abs, default(sbyte)),
+
+				ReflectHelper.FastGetMethod(Math.Sign, default(decimal)),
+				ReflectHelper.FastGetMethod(Math.Sign, default(double)),
+				ReflectHelper.FastGetMethod(Math.Sign, default(float)),
+				ReflectHelper.FastGetMethod(Math.Sign, default(long)),
+				ReflectHelper.FastGetMethod(Math.Sign, default(int)),
+				ReflectHelper.FastGetMethod(Math.Sign, default(short)),
+				ReflectHelper.FastGetMethod(Math.Sign, default(sbyte)),
+
+				ReflectHelper.FastGetMethod(Math.Floor, default(decimal)),
+				ReflectHelper.FastGetMethod(Math.Floor, default(double)),
+				ReflectHelper.FastGetMethod(decimal.Floor, default(decimal)),
+
+				ReflectHelper.FastGetMethod(Math.Ceiling, default(decimal)),
+				ReflectHelper.FastGetMethod(Math.Ceiling, default(double)),
+				ReflectHelper.FastGetMethod(decimal.Ceiling, default(decimal)),
+
+				ReflectHelper.FastGetMethod(Math.Pow, default(double), default(double)),
+
+#if NETCOREAPP2_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+				ReflectHelper.FastGetMethod(MathF.Sin, default(float)),
+				ReflectHelper.FastGetMethod(MathF.Cos, default(float)),
+				ReflectHelper.FastGetMethod(MathF.Tan, default(float)),
+
+				ReflectHelper.FastGetMethod(MathF.Sinh, default(float)),
+				ReflectHelper.FastGetMethod(MathF.Cosh, default(float)),
+				ReflectHelper.FastGetMethod(MathF.Tanh, default(float)),
+
+				ReflectHelper.FastGetMethod(MathF.Asin, default(float)),
+				ReflectHelper.FastGetMethod(MathF.Acos, default(float)),
+				ReflectHelper.FastGetMethod(MathF.Atan, default(float)),
+				ReflectHelper.FastGetMethod(MathF.Atan2, default(float), default(float)),
+
+				ReflectHelper.FastGetMethod(MathF.Sqrt, default(float)),
+
+				ReflectHelper.FastGetMethod(MathF.Abs, default(float)),
+
+				ReflectHelper.FastGetMethod(MathF.Sign, default(float)),
+
+				ReflectHelper.FastGetMethod(MathF.Floor, default(float)),
+
+				ReflectHelper.FastGetMethod(MathF.Ceiling, default(float)),
+
+				ReflectHelper.FastGetMethod(MathF.Pow, default(float), default(float)),
+#endif
+			};
 		}
 
 		public override HqlTreeNode BuildHql(MethodInfo method, Expression expression, ReadOnlyCollection<Expression> arguments, HqlTreeBuilder treeBuilder, IHqlExpressionVisitor visitor)
@@ -66,13 +91,13 @@ namespace NHibernate.Linq.Functions
 			if (function == "pow")
 				function = "power";
 
-			HqlExpression firstArgument = visitor.Visit(arguments[0]).AsExpression();
+			var firstArgument = visitor.Visit(arguments[0]).AsExpression();
 
 			if (arguments.Count == 2)
 			{
 				return treeBuilder.MethodCall(function, firstArgument, visitor.Visit(arguments[1]).AsExpression());
 			}
-			
+
 			return treeBuilder.MethodCall(function, firstArgument);
 		}
 	}

@@ -7,7 +7,7 @@ namespace NHibernate.Transform
 	[Serializable]
 	public class RootEntityResultTransformer : IResultTransformer, ITupleSubsetResultTransformer
 	{
-		private static readonly object Hasher = new object();
+		internal static readonly RootEntityResultTransformer Instance = new RootEntityResultTransformer();
 
 		public object TransformTuple(object[] tuple, string[] aliases)
 		{
@@ -19,12 +19,10 @@ namespace NHibernate.Transform
 			return collection;
 		}
 
-
 		public bool IsTransformedValueATupleElement(String[] aliases, int tupleLength)
 		{
 			return true;
 		}
-
 
 		public bool[] IncludeInTransform(String[] aliases, int tupleLength)
 		{
@@ -43,16 +41,16 @@ namespace NHibernate.Transform
 
 		public override bool Equals(object obj)
 		{
+			if (ReferenceEquals(obj, this))
+				return true;
 			if (obj == null)
-			{
 				return false;
-			}
-			return obj.GetHashCode() == Hasher.GetHashCode();
+			return obj.GetType() == GetType();
 		}
 
 		public override int GetHashCode()
 		{
-			return Hasher.GetHashCode();
+			return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Instance);
 		}
 	}
 }

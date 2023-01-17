@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using NHibernate.Cfg.MappingSchema;
 using NHibernate.Mapping.ByCode;
@@ -7,13 +8,29 @@ using NUnit.Framework;
 
 namespace NHibernate.Test.MappingByCode.MappersTests.DynamicComponentMapperTests
 {
+	[TestFixture]
 	public class DynComponentPropertyOnDynamicCompoTests
 	{
 		private class Person
 		{
 			public int Id { get; set; }
+			// Assigned by reflection
+#pragma warning disable CS0649 // Field is never assigned to, and will always have its default value
 			private IDictionary info;
+#pragma warning restore CS0649 // Field is never assigned to, and will always have its default value
 			public IDictionary Info
+			{
+				get { return info; }
+			}
+		}
+
+		private class PersonWithGenericInfo
+		{
+			public int Id { get; set; }
+#pragma warning disable CS0649 // Field is never assigned to, and will always have its default value
+			private IDictionary<string, object> info;
+#pragma warning restore CS0649 // Field is never assigned to, and will always have its default value
+			public IDictionary<string, object> Info
 			{
 				get { return info; }
 			}
@@ -25,7 +42,20 @@ namespace NHibernate.Test.MappingByCode.MappersTests.DynamicComponentMapperTests
 			var mapdoc = new HbmMapping();
 			var component = new HbmDynamicComponent();
 			var mapper = new DynamicComponentMapper(component, For<Person>.Property(p => p.Info), mapdoc);
-			var propertyInfo = For<Person>.Property(p => p.Info);//just as another dyn-compo
+			var propertyInfo = For<Person>.Property(p => p.Info); //just as another dyn-compo
+
+			mapper.Component(propertyInfo, (IDynamicComponentMapper x) => { });
+
+			Assert.That(component.Properties.Select(x => x.Name), Is.EquivalentTo(new[] { "Info" }));
+		}
+
+		[Test]
+		public void WhenAddThenHasGeneric()
+		{
+			var mapdoc = new HbmMapping();
+			var component = new HbmDynamicComponent();
+			var mapper = new DynamicComponentMapper(component, For<PersonWithGenericInfo>.Property(p => p.Info), mapdoc);
+			var propertyInfo = For<PersonWithGenericInfo>.Property(p => p.Info); //just as another dyn-compo
 
 			mapper.Component(propertyInfo, (IDynamicComponentMapper x) => { });
 
@@ -38,7 +68,21 @@ namespace NHibernate.Test.MappingByCode.MappersTests.DynamicComponentMapperTests
 			var mapdoc = new HbmMapping();
 			var component = new HbmDynamicComponent();
 			var mapper = new DynamicComponentMapper(component, For<Person>.Property(p => p.Info), mapdoc);
-			var propertyInfo = For<Person>.Property(p => p.Info);//just as another dyn-compo
+			var propertyInfo = For<Person>.Property(p => p.Info); //just as another dyn-compo
+
+			var called = false;
+			mapper.Component(propertyInfo, (IDynamicComponentMapper x) => called = true);
+
+			Assert.That(called, Is.True);
+		}
+
+		[Test]
+		public void WhenCustomizeThenCallCustomizerGeneric()
+		{
+			var mapdoc = new HbmMapping();
+			var component = new HbmDynamicComponent();
+			var mapper = new DynamicComponentMapper(component, For<PersonWithGenericInfo>.Property(p => p.Info), mapdoc);
+			var propertyInfo = For<PersonWithGenericInfo>.Property(p => p.Info); //just as another dyn-compo
 
 			var called = false;
 			mapper.Component(propertyInfo, (IDynamicComponentMapper x) => called = true);
@@ -52,7 +96,20 @@ namespace NHibernate.Test.MappingByCode.MappersTests.DynamicComponentMapperTests
 			var mapdoc = new HbmMapping();
 			var component = new HbmDynamicComponent();
 			var mapper = new DynamicComponentMapper(component, For<Person>.Property(p => p.Info), mapdoc);
-			var propertyInfo = For<Person>.Property(p => p.Info);//just as another dyn-compo
+			var propertyInfo = For<Person>.Property(p => p.Info); //just as another dyn-compo
+
+			mapper.Component(propertyInfo, (IDynamicComponentMapper x) => x.Access(Accessor.Field));
+
+			Assert.That(component.Properties.OfType<HbmDynamicComponent>().Single().Access, Is.Null.Or.Empty);
+		}
+
+		[Test]
+		public void WhenCustomizeAccessorThenIgnoreGeneric()
+		{
+			var mapdoc = new HbmMapping();
+			var component = new HbmDynamicComponent();
+			var mapper = new DynamicComponentMapper(component, For<PersonWithGenericInfo>.Property(p => p.Info), mapdoc);
+			var propertyInfo = For<PersonWithGenericInfo>.Property(p => p.Info); //just as another dyn-compo
 
 			mapper.Component(propertyInfo, (IDynamicComponentMapper x) => x.Access(Accessor.Field));
 

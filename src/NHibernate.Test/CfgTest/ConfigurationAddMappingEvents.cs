@@ -7,6 +7,7 @@ using NUnit.Framework;
 
 namespace NHibernate.Test.CfgTest
 {
+	[TestFixture]
 	public class ConfigurationAddMappingEvents
 	{
 		private const string ProductLineMapping =
@@ -52,7 +53,6 @@ namespace NHibernate.Test.CfgTest
 			Assert.That(listOfCalls.Count, Is.EqualTo(2));
 			Assert.That(listOfCalls.Select(x => x.FileName).All(x => x != null), Is.True);
 			Assert.That(listOfCalls.Select(x => x.Mapping).All(x => x != null), Is.True);
-			Assert.That(listOfCalls.Select(x => x.Dialect).All(x => x.GetType() == typeof (MsSql2008Dialect)), Is.True);
 		}
 
 		[Test]
@@ -69,7 +69,6 @@ namespace NHibernate.Test.CfgTest
 			Assert.That(listOfCalls.Count, Is.EqualTo(2));
 			Assert.That(listOfCalls.Select(x => x.FileName).All(x => x != null), Is.True);
 			Assert.That(listOfCalls.Select(x => x.Mapping).All(x => x != null), Is.True);
-			Assert.That(listOfCalls.Select(x => x.Dialect).All(x => x.GetType() == typeof(MsSql2008Dialect)), Is.True);
 		}
 	}
 }

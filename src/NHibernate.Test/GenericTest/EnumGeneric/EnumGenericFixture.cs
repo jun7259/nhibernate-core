@@ -8,12 +8,12 @@ using NUnit.Framework;
 namespace NHibernate.Test.GenericTest.EnumGeneric
 {
 	/// <summary>
-	/// http://jira.nhibernate.org/browse/NH-1236
+	/// http://nhibernate.jira.com/browse/NH-1236
 	/// </summary>
 	[TestFixture]
 	public class EnumGenericFixture : TestCase
 	{
-		protected override IList Mappings
+		protected override string[] Mappings
 		{
 			get { return new String[] {"GenericTest.EnumGeneric.EnumGenericFixture.hbm.xml"}; }
 		}

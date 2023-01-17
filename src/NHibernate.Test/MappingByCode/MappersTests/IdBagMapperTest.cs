@@ -8,6 +8,7 @@ using NUnit.Framework;
 
 namespace NHibernate.Test.MappingByCode.MappersTests
 {
+	[TestFixture]
 	public class IdBagMapperTest
 	{
 		private class Animal
@@ -120,7 +121,7 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 		{
 			var hbm = new HbmIdbag();
 			var mapper = new IdBagMapper(typeof(Animal), typeof(Animal), hbm);
-			Assert.That(() => mapper.Type(null), Throws.TypeOf<ArgumentNullException>());
+			Assert.That(() => mapper.Type(default(System.Type)), Throws.TypeOf<ArgumentNullException>());
 			Assert.That(() => mapper.Type(typeof(object)), Throws.TypeOf<ArgumentOutOfRangeException>());
 		}
 
@@ -130,7 +131,7 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 			var hbm = new HbmIdbag();
 			var mapper = new IdBagMapper(typeof(Animal), typeof(Animal), hbm);
 			mapper.Type<FakeUserCollectionType>();
-			Assert.That(hbm.CollectionType, Is.StringContaining("FakeUserCollectionType"));
+			Assert.That(hbm.CollectionType, Does.Contain("FakeUserCollectionType"));
 		}
 
 		[Test]
@@ -139,7 +140,7 @@ namespace NHibernate.Test.MappingByCode.MappersTests
 			var hbm = new HbmIdbag();
 			var mapper = new IdBagMapper(typeof(Animal), typeof(Animal), hbm);
 			mapper.Type(typeof(FakeUserCollectionType));
-			Assert.That(hbm.CollectionType, Is.StringContaining("FakeUserCollectionType"));
+			Assert.That(hbm.CollectionType, Does.Contain("FakeUserCollectionType"));
 		}
 
 		[Test]

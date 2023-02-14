@@ -9,7 +9,6 @@ using NHibernate.AdoNet;
 using NHibernate.Dialect;
 using NHibernate.Engine;
 using NHibernate.SqlTypes;
-using NHibernate.Type;
 
 namespace NHibernate.Driver
 {
@@ -27,10 +26,10 @@ namespace NHibernate.Driver
 		// Since v5.1
 		[Obsolete("Use MsSql2000Dialect.MaxSizeForAnsiClob")]
 		public const int MaxSizeForAnsiClob = 2147483647; // int.MaxValue
-		// Since v5.1
+														  // Since v5.1
 		[Obsolete("Use MsSql2000Dialect.MaxSizeForClob")]
 		public const int MaxSizeForClob = 1073741823; // int.MaxValue / 2
-		// Since v5.1
+													  // Since v5.1
 		[Obsolete("Use MsSql2000Dialect.MaxSizeForBlob")]
 		public const int MaxSizeForBlob = 2147483647; // int.MaxValue
 
@@ -199,6 +198,14 @@ namespace NHibernate.Driver
 				dbParam.Precision = sqlType.Precision;
 				dbParam.Scale = sqlType.Scale;
 			}
+
+			if (sqlType is StructuredSqlType)
+			{
+				//NH-3736
+				var sqlParam = dbParam as System.Data.SqlClient.SqlParameter;
+				sqlParam.SqlDbType = SqlDbType.Structured;
+				sqlParam.TypeName = (sqlType as StructuredSqlType).TypeName;
+			}
 		}
 
 		// Since v5.1
@@ -296,7 +303,7 @@ namespace NHibernate.Driver
 		protected static bool IsChar(DbParameter dbParam, SqlType sqlType)
 		{
 			return (DbType.StringFixedLength == dbParam.DbType || DbType.AnsiStringFixedLength == dbParam.DbType) &&
-			       sqlType.LengthDefined && sqlType.Length == 1;
+				   sqlType.LengthDefined && sqlType.Length == 1;
 		}
 
 		public override IResultSetsCommand GetResultSetsCommand(ISessionImplementor session)

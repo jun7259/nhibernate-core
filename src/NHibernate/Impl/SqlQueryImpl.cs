@@ -187,6 +187,7 @@ namespace NHibernate.Impl
 
 		public override QueryParameters GetQueryParameters(IDictionary<string, TypedValue> namedParams)
 		{
+			VerifyParameters();
 			QueryParameters qp = base.GetQueryParameters(namedParams);
 			qp.Callable = callable;
 			qp.HasAutoDiscoverScalarTypes = autoDiscoverTypes;
@@ -368,7 +369,7 @@ namespace NHibernate.Impl
 
 		public override int ExecuteUpdate()
 		{
-			IDictionary<string,TypedValue> namedParams = NamedParams;
+			IDictionary<string, TypedValue> namedParams = NamedParams;
 			Before();
 			try
 			{

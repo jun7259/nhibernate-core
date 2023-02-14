@@ -12,7 +12,7 @@ namespace NHibernate.SqlTypes
 	{
 		// key = typeof(sqlType).Name : ie - BinarySqlType(l), BooleanSqlType, DecimalSqlType(p,s)
 		// value = SqlType
-		private static readonly ConcurrentDictionary<string, SqlType> SqlTypes = 
+		private static readonly ConcurrentDictionary<string, SqlType> SqlTypes =
 			new ConcurrentDictionary<string, SqlType>(4 * Environment.ProcessorCount, 128);
 
 		public static readonly SqlType Guid = new SqlType(DbType.Guid);
@@ -36,6 +36,11 @@ namespace NHibernate.SqlTypes
 		public static readonly SqlType UInt64 = new SqlType(DbType.UInt64);
 
 		public static readonly SqlType[] NoTypes = Array.Empty<SqlType>();
+
+		public static SqlType Structured(string typeName)
+		{
+			return new StructuredSqlType(typeName);
+		}
 
 		private delegate T TypeWithLenOrScaleCreateDelegate<out T, in TDim>(TDim lengthOrScale); // Func<int, T>
 

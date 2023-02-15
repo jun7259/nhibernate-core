@@ -34,7 +34,7 @@ namespace NHibernate.Criterion
 			else
 			{
 				//р把计ノ,﹃癬ㄓ
-				_values = new object[] { string.Join(", ", values) };
+				_values = new object[] { string.Join(",", values) };
 			}
 		}
 
@@ -48,7 +48,7 @@ namespace NHibernate.Criterion
 			else
 			{
 				//р把计ノ,﹃癬ㄓ
-				_values = new object[] { string.Join(", ", values) };
+				_values = new object[] { string.Join(",", values) };
 			}
 		}
 

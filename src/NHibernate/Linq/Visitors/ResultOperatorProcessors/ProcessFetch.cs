@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using NHibernate.Hql.Ast;
+using NHibernate.Persister.Entity;
 using NHibernate.Type;
 using Remotion.Linq.EagerFetching;
 
@@ -52,7 +53,20 @@ namespace NHibernate.Linq.Visitors.ResultOperatorProcessors
 				{
 					var metadata = queryModelVisitor.VisitorParameters.SessionFactory
 													.GetClassMetadata(resultOperator.RelationMember.ReflectedType);
-					propType = metadata?.GetPropertyType(resultOperator.RelationMember.Name);
+					if (metadata == null)
+					{
+						foreach (var entityName in queryModelVisitor.VisitorParameters.SessionFactory
+							         .GetImplementors(resultOperator.RelationMember.ReflectedType.FullName))
+						{
+							if (queryModelVisitor.VisitorParameters.SessionFactory.GetClassMetadata(entityName) is IPropertyMapping propertyMapping
+							   && propertyMapping.TryToType(resultOperator.RelationMember.Name, out propType))
+								break;
+						}
+					}
+					else
+					{
+						propType = metadata.GetPropertyType(resultOperator.RelationMember.Name);
+					}
 				}
 				
 				if (propType != null && !propType.IsAssociationType)
